@@ -63,6 +63,7 @@ mod tests {
             id: 1,
             name: "Test".to_string(),
             keyword: "test".to_string(),
+            min_price: None,
             max_price: None,
             city: city.map(std::string::ToString::to_string),
             radius_km: radius,

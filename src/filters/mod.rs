@@ -1,7 +1,9 @@
 mod keyword;
+mod price;
 mod radius;
 
 pub use keyword::KeywordFilter;
+pub use price::PriceFilter;
 pub use radius::RadiusFilter;
 
 use crate::api::OfferData;
@@ -27,10 +29,11 @@ impl FilterChain {
         Self::default()
     }
 
-    /// Create a filter chain with default filters (keyword, radius)
+    /// Create a filter chain with default filters (keyword, price, radius)
     pub fn with_defaults() -> Self {
         let mut chain = Self::new();
         chain.add(Box::new(KeywordFilter));
+        chain.add(Box::new(PriceFilter));
         chain.add(Box::new(RadiusFilter));
         chain
     }
@@ -101,6 +104,7 @@ mod tests {
             id: 1,
             name: "Test".to_string(),
             keyword: "test".to_string(),
+            min_price: None,
             max_price: None,
             city: None,
             radius_km: None,

@@ -10,6 +10,7 @@ pub struct Search {
     pub id: i64,
     pub name: String,
     pub keyword: String,
+    pub min_price: Option<f64>,
     pub max_price: Option<f64>,
     pub city: Option<String>,
     pub radius_km: Option<i32>,
@@ -82,6 +83,7 @@ impl Database {
         &self,
         name: &str,
         keyword: &str,
+        min_price: Option<f64>,
         max_price: Option<f64>,
         city: Option<&str>,
         radius_km: Option<i32>,
@@ -90,9 +92,9 @@ impl Database {
     ) -> Result<i64> {
         let sort = sort_order.unwrap_or("newest");
         self.conn.execute(
-            "INSERT INTO searches (name, keyword, max_price, city, radius_km, category_id, sort_order)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![name, keyword, max_price, city, radius_km, category_id, sort],
+            "INSERT INTO searches (name, keyword, min_price, max_price, city, radius_km, category_id, sort_order)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![name, keyword, min_price, max_price, city, radius_km, category_id, sort],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -100,7 +102,7 @@ impl Database {
     pub fn get_search(&self, id: i64) -> Result<Option<Search>> {
         self.conn
             .query_row(
-                "SELECT id, name, keyword, max_price, city, radius_km, category_id, sort_order, active, created_at
+                "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at
                  FROM searches WHERE id = ?1",
                 params![id],
                 |row| {
@@ -108,13 +110,14 @@ impl Database {
                         id: row.get(0)?,
                         name: row.get(1)?,
                         keyword: row.get(2)?,
-                        max_price: row.get(3)?,
-                        city: row.get(4)?,
-                        radius_km: row.get(5)?,
-                        category_id: row.get(6)?,
-                        sort_order: row.get::<_, Option<String>>(7)?.unwrap_or_else(|| "newest".to_string()),
-                        active: row.get::<_, i32>(8)? != 0,
-                        created_at: row.get(9)?,
+                        min_price: row.get(3)?,
+                        max_price: row.get(4)?,
+                        city: row.get(5)?,
+                        radius_km: row.get(6)?,
+                        category_id: row.get(7)?,
+                        sort_order: row.get::<_, Option<String>>(8)?.unwrap_or_else(|| "newest".to_string()),
+                        active: row.get::<_, i32>(9)? != 0,
+                        created_at: row.get(10)?,
                     })
                 },
             )
@@ -124,10 +127,10 @@ impl Database {
 
     pub fn list_searches(&self, active_only: bool) -> Result<Vec<Search>> {
         let sql = if active_only {
-            "SELECT id, name, keyword, max_price, city, radius_km, category_id, sort_order, active, created_at
+            "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at
              FROM searches WHERE active = 1 ORDER BY id"
         } else {
-            "SELECT id, name, keyword, max_price, city, radius_km, category_id, sort_order, active, created_at
+            "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at
              FROM searches ORDER BY id"
         };
 
@@ -138,15 +141,16 @@ impl Database {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     keyword: row.get(2)?,
-                    max_price: row.get(3)?,
-                    city: row.get(4)?,
-                    radius_km: row.get(5)?,
-                    category_id: row.get(6)?,
+                    min_price: row.get(3)?,
+                    max_price: row.get(4)?,
+                    city: row.get(5)?,
+                    radius_km: row.get(6)?,
+                    category_id: row.get(7)?,
                     sort_order: row
-                        .get::<_, Option<String>>(7)?
+                        .get::<_, Option<String>>(8)?
                         .unwrap_or_else(|| "newest".to_string()),
-                    active: row.get::<_, i32>(8)? != 0,
-                    created_at: row.get(9)?,
+                    active: row.get::<_, i32>(9)? != 0,
+                    created_at: row.get(10)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -436,7 +440,8 @@ mod tests {
             .create_search(
                 "Test",
                 "iphone",
-                Some(500.0),
+                Some(100.0), // min_price
+                Some(500.0), // max_price
                 Some("Porto"),
                 Some(30),
                 None,
@@ -462,7 +467,7 @@ mod tests {
     fn test_listing_upsert() {
         let db = Database::open_in_memory().unwrap();
 
-        let search_id = db.create_search("Test", "iphone", None, None, None, None, None).unwrap();
+        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None).unwrap();
 
         // Insert new listing
         let is_new = db
@@ -509,7 +514,7 @@ mod tests {
     fn test_search_stats() {
         let db = Database::open_in_memory().unwrap();
 
-        let search_id = db.create_search("Test", "iphone", None, None, None, None, None).unwrap();
+        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None).unwrap();
 
         db.upsert_listing(1, search_id, "A", Some(100.0), "EUR", "url1", None, None, None).unwrap();
         db.upsert_listing(2, search_id, "B", Some(200.0), "EUR", "url2", None, None, None).unwrap();

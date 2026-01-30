@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
+use olx_tracker::api::SearchParams;
 use olx_tracker::{
     Config, Database, FilterChain, MultiNotifier, Notifier, OlxClient, SearchTracker, SortOrder,
 };
@@ -70,6 +71,10 @@ enum Commands {
         /// Search keyword (e.g., "playstation 2")
         #[arg(short, long)]
         keyword: String,
+
+        /// Minimum price filter (ignore cheaper junk results)
+        #[arg(long)]
+        min_price: Option<f64>,
 
         /// Maximum price threshold for deals (per-search)
         #[arg(short = 'p', long)]
@@ -148,6 +153,36 @@ enum Commands {
         #[arg(short, long)]
         search_id: i64,
     },
+
+    /// Quick search OLX (no database, just display results)
+    Search {
+        /// Search query (e.g., "playstation 2")
+        query: String,
+
+        /// Maximum results to show
+        #[arg(short, long, default_value = "20")]
+        max: i32,
+
+        /// Sort order: newest, cheapest, expensive, relevance
+        #[arg(short, long, default_value = "relevance")]
+        sort: String,
+
+        /// Minimum price filter (ignore cheaper junk)
+        #[arg(long)]
+        min_price: Option<f64>,
+
+        /// Maximum price filter
+        #[arg(long)]
+        max_price: Option<f64>,
+
+        /// City to search in
+        #[arg(long)]
+        city: Option<String>,
+
+        /// Search radius in km (requires city)
+        #[arg(short, long)]
+        radius: Option<i32>,
+    },
 }
 
 #[tokio::main]
@@ -205,8 +240,8 @@ async fn main() -> Result<()> {
     let db = Database::open(db_path)?;
 
     match cli.command {
-        Commands::Add { name, keyword, max_price, city, radius, category, sort } => {
-            cmd_add(&db, &name, &keyword, max_price, city, radius, category, &sort)?;
+        Commands::Add { name, keyword, min_price, max_price, city, radius, category, sort } => {
+            cmd_add(&db, &name, &keyword, min_price, max_price, city, radius, category, &sort)?;
         }
         Commands::List { all } => {
             cmd_list(&db, all)?;
@@ -229,6 +264,9 @@ async fn main() -> Result<()> {
         Commands::Toggle { search_id } => {
             cmd_toggle(&db, search_id)?;
         }
+        Commands::Search { query, max, sort, min_price, max_price, city, radius } => {
+            cmd_search(&config, &query, max, &sort, min_price, max_price, city, radius).await?;
+        }
     }
 
     Ok(())
@@ -239,6 +277,7 @@ fn cmd_add(
     db: &Database,
     name: &str,
     keyword: &str,
+    min_price: Option<f64>,
     max_price: Option<f64>,
     city: Option<String>,
     radius: Option<i32>,
@@ -248,9 +287,24 @@ fn cmd_add(
     // Validate sort order
     let _: SortOrder = sort.parse().map_err(|e: String| anyhow::anyhow!("{e}"))?;
 
-    let id =
-        db.create_search(name, keyword, max_price, city.as_deref(), radius, category, Some(sort))?;
-    println!("Created search '{name}' with ID {id} (sort: {sort})");
+    let id = db.create_search(
+        name,
+        keyword,
+        min_price,
+        max_price,
+        city.as_deref(),
+        radius,
+        category,
+        Some(sort),
+    )?;
+
+    let price_info = match (min_price, max_price) {
+        (Some(min), Some(max)) => format!(", price: {min:.0}€-{max:.0}€"),
+        (Some(min), None) => format!(", min: {min:.0}€"),
+        (None, Some(max)) => format!(", max: {max:.0}€"),
+        (None, None) => String::new(),
+    };
+    println!("Created search '{name}' with ID {id} (sort: {sort}{price_info})");
     Ok(())
 }
 
@@ -263,22 +317,27 @@ fn cmd_list(db: &Database, include_inactive: bool) -> Result<()> {
     }
 
     println!(
-        "{:<4} {:<18} {:<18} {:<8} {:<12} {:<10} {:<6}",
-        "ID", "Name", "Keyword", "Max €", "City", "Sort", "Active"
+        "{:<4} {:<18} {:<18} {:<12} {:<12} {:<10} {:<6}",
+        "ID", "Name", "Keyword", "Price", "City", "Sort", "Active"
     );
-    println!("{}", "-".repeat(85));
+    println!("{}", "-".repeat(90));
 
     for search in searches {
-        let max_price = search.max_price.map_or_else(|| "-".to_string(), |p| format!("{p:.0}"));
+        let price_range = match (search.min_price, search.max_price) {
+            (Some(min), Some(max)) => format!("{min:.0}-{max:.0}€"),
+            (Some(min), None) => format!(">{min:.0}€"),
+            (None, Some(max)) => format!("<{max:.0}€"),
+            (None, None) => "-".to_string(),
+        };
         let city = search.city.as_deref().unwrap_or("-");
         let active = if search.active { "Yes" } else { "No" };
 
         println!(
-            "{:<4} {:<18} {:<18} {:<8} {:<12} {:<10} {:<6}",
+            "{:<4} {:<18} {:<18} {:<12} {:<12} {:<10} {:<6}",
             search.id,
             truncate(&search.name, 16),
             truncate(&search.keyword, 16),
-            max_price,
+            truncate(&price_range, 10),
             truncate(city, 10),
             truncate(&search.sort_order, 8),
             active
@@ -436,6 +495,110 @@ fn cmd_toggle(db: &Database, search_id: i64) -> Result<()> {
     db.set_search_active(search_id, new_status)?;
 
     println!("Search '{}' is now {}", search.name, if new_status { "active" } else { "inactive" });
+    Ok(())
+}
+
+async fn cmd_search(
+    config: &Config,
+    query: &str,
+    max_results: i32,
+    sort: &str,
+    min_price: Option<f64>,
+    max_price: Option<f64>,
+    city: Option<String>,
+    radius: Option<i32>,
+) -> Result<()> {
+    let sort_order: SortOrder = sort.parse().map_err(|e: String| anyhow::anyhow!("{e}"))?;
+
+    let client = OlxClient::new(config)?;
+
+    let params = SearchParams {
+        query: query.to_string(),
+        city,
+        radius_km: radius,
+        category_id: None,
+        sort: sort_order,
+        offset: 0,
+        limit: 50,
+    };
+
+    // Fetch more results to account for filtering
+    let fetch_count = max_results * 3; // Fetch 3x to have enough after filtering
+    let all_offers = client.search_all(&params, fetch_count).await?;
+
+    // Apply price filters
+    let offers: Vec<_> = all_offers
+        .into_iter()
+        .filter(|o| {
+            let price = o.get_price();
+            match (price, min_price, max_price) {
+                (None, _, _) => true, // Keep items without price
+                (Some(p), Some(min), Some(max)) => p >= min && p <= max,
+                (Some(p), Some(min), None) => p >= min,
+                (Some(p), None, Some(max)) => p <= max,
+                (Some(_), None, None) => true,
+            }
+        })
+        .take(max_results as usize)
+        .collect();
+
+    if offers.is_empty() {
+        println!("No results found for '{query}'");
+        if min_price.is_some() || max_price.is_some() {
+            println!("(price filter: {} - {})",
+                min_price.map_or("any".to_string(), |p| format!("{p:.0}€")),
+                max_price.map_or("any".to_string(), |p| format!("{p:.0}€"))
+            );
+        }
+        return Ok(());
+    }
+
+    let filter_info = match (min_price, max_price) {
+        (Some(min), Some(max)) => format!(" [price: {min:.0}€ - {max:.0}€]"),
+        (Some(min), None) => format!(" [min: {min:.0}€]"),
+        (None, Some(max)) => format!(" [max: {max:.0}€]"),
+        (None, None) => String::new(),
+    };
+
+    println!(
+        "Found {} result(s) for '{}' (sorted by {}{}):\n",
+        offers.len(),
+        query,
+        sort,
+        filter_info
+    );
+
+    println!(
+        "{:<10} {:<45} {:<12} {:<20}",
+        "ID", "Title", "Price", "Location"
+    );
+    println!("{}", "-".repeat(90));
+
+    for offer in &offers {
+        let price = offer
+            .get_price()
+            .map_or_else(|| "-".to_string(), |p| format!("{p:.2} €"));
+        let city = offer.get_city().unwrap_or_else(|| "-".to_string());
+        let region = offer.get_region();
+        let location = match region {
+            Some(r) => format!("{}, {}", city, r),
+            None => city,
+        };
+
+        println!(
+            "{:<10} {:<45} {:<12} {:<20}",
+            offer.id,
+            truncate(&offer.title, 43),
+            price,
+            truncate(&location, 18)
+        );
+    }
+
+    println!("\nURLs:");
+    for offer in &offers {
+        println!("  {} - {}", offer.id, offer.url);
+    }
+
     Ok(())
 }
 

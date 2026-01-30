@@ -43,6 +43,7 @@ mod tests {
             id: 1,
             name: "Test".to_string(),
             keyword: keyword.to_string(),
+            min_price: None,
             max_price: None,
             city: None,
             radius_km: None,
