@@ -132,29 +132,16 @@ async fn main() -> Result<()> {
     let db = Database::open(db_path)?;
 
     match cli.command {
-        Commands::Add {
-            name,
-            keyword,
-            max_price,
-            city,
-            radius,
-            category,
-        } => {
+        Commands::Add { name, keyword, max_price, city, radius, category } => {
             cmd_add(&db, &name, &keyword, max_price, city, radius, category)?;
         }
         Commands::List { all } => {
             cmd_list(&db, all)?;
         }
-        Commands::Run {
-            search_id,
-            max_results,
-        } => {
+        Commands::Run { search_id, max_results } => {
             cmd_run(&db, &config, search_id, max_results).await?;
         }
-        Commands::Daemon {
-            interval,
-            max_results,
-        } => {
+        Commands::Daemon { interval, max_results } => {
             cmd_daemon(&db, &config, interval, max_results).await?;
         }
         Commands::Deals { search_id } => {
@@ -203,9 +190,7 @@ fn cmd_list(db: &Database, include_inactive: bool) -> Result<()> {
     println!("{}", "-".repeat(80));
 
     for search in searches {
-        let max_price = search
-            .max_price
-            .map_or_else(|| "-".to_string(), |p| format!("{p:.2}"));
+        let max_price = search.max_price.map_or_else(|| "-".to_string(), |p| format!("{p:.2}"));
         let city = search.city.as_deref().unwrap_or("-");
         let active = if search.active { "Yes" } else { "No" };
 
@@ -235,9 +220,8 @@ async fn cmd_run(
     let notifier = WebhookNotifier::new(config.notifications.clone());
 
     let results = if let Some(id) = search_id {
-        let search = db
-            .get_search(id)?
-            .ok_or_else(|| anyhow::anyhow!("Search with ID {id} not found"))?;
+        let search =
+            db.get_search(id)?.ok_or_else(|| anyhow::anyhow!("Search with ID {id} not found"))?;
         vec![tracker.run_search(&search, max_results).await?]
     } else {
         tracker.run_all_searches(max_results).await?
@@ -271,11 +255,7 @@ async fn cmd_run(
         }
 
         if !result.deals.is_empty() {
-            println!(
-                "Found {} deal(s) for search {}",
-                result.deals.len(),
-                result.search_id
-            );
+            println!("Found {} deal(s) for search {}", result.deals.len(), result.search_id);
             if let Err(e) = notifier.notify_deals(&result.deals, avg_price).await {
                 warn!("Failed to send deals notification: {}", e);
             }
@@ -295,10 +275,7 @@ async fn cmd_daemon(
     interval_mins: u64,
     max_results: i32,
 ) -> Result<()> {
-    info!(
-        "Starting daemon mode, checking every {} minutes",
-        interval_mins
-    );
+    info!("Starting daemon mode, checking every {} minutes", interval_mins);
     let interval = Duration::from_secs(interval_mins * 60);
 
     loop {
@@ -325,9 +302,7 @@ fn cmd_deals(db: &Database, search_id: Option<i64>) -> Result<()> {
     println!("{}", "-".repeat(75));
 
     for deal in deals {
-        let price = deal
-            .price
-            .map_or_else(|| "-".to_string(), |p| format!("{p:.2} €"));
+        let price = deal.price.map_or_else(|| "-".to_string(), |p| format!("{p:.2} €"));
         let city = deal.city.as_deref().unwrap_or("-");
 
         println!(
@@ -357,19 +332,14 @@ fn cmd_stats(db: &Database, search_id: i64) -> Result<()> {
     println!("City:            {}", search.city.as_deref().unwrap_or("-"));
     println!(
         "Radius:          {}",
-        search
-            .radius_km
-            .map_or_else(|| "-".to_string(), |r| format!("{r} km"))
+        search.radius_km.map_or_else(|| "-".to_string(), |r| format!("{r} km"))
     );
     println!();
     println!("Total listings:  {}", stats.total_listings);
     println!("Average price:   {}", fmt_price(stats.avg_price));
     println!("Min price:       {}", fmt_price(stats.min_price));
     println!("Max price:       {}", fmt_price(stats.max_price));
-    println!(
-        "Last updated:    {}",
-        stats.last_updated_at.as_deref().unwrap_or("-")
-    );
+    println!("Last updated:    {}", stats.last_updated_at.as_deref().unwrap_or("-"));
 
     Ok(())
 }
@@ -391,11 +361,7 @@ fn cmd_toggle(db: &Database, search_id: i64) -> Result<()> {
     let new_status = !search.active;
     db.set_search_active(search_id, new_status)?;
 
-    println!(
-        "Search '{}' is now {}",
-        search.name,
-        if new_status { "active" } else { "inactive" }
-    );
+    println!("Search '{}' is now {}", search.name, if new_status { "active" } else { "inactive" });
     Ok(())
 }
 

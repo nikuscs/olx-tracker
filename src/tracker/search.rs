@@ -24,11 +24,7 @@ pub struct TrackResult {
 
 impl<'a> SearchTracker<'a> {
     pub fn new(db: &'a Database, client: &'a OlxClient) -> Self {
-        Self {
-            db,
-            client,
-            filters: FilterChain::default(),
-        }
+        Self { db, client, filters: FilterChain::default() }
     }
 
     pub fn with_filters(mut self, filters: FilterChain) -> Self {
@@ -37,10 +33,7 @@ impl<'a> SearchTracker<'a> {
     }
 
     pub async fn run_search(&self, search: &Search, max_results: i32) -> Result<TrackResult> {
-        info!(
-            "Running search '{}' (id={}, keyword='{}')",
-            search.name, search.id, search.keyword
-        );
+        info!("Running search '{}' (id={}, keyword='{}')", search.name, search.id, search.keyword);
 
         let params = SearchParams {
             query: search.keyword.clone(),
@@ -55,10 +48,8 @@ impl<'a> SearchTracker<'a> {
         info!("Found {} listings from API", offers.len());
 
         // Apply filters
-        let filtered_offers: Vec<_> = offers
-            .into_iter()
-            .filter(|offer| self.filters.apply(offer, search))
-            .collect();
+        let filtered_offers: Vec<_> =
+            offers.into_iter().filter(|offer| self.filters.apply(offer, search)).collect();
 
         debug!("{} listings after filtering", filtered_offers.len());
 
@@ -71,12 +62,8 @@ impl<'a> SearchTracker<'a> {
         };
 
         // Get existing listings to check for price drops
-        let existing_listings: std::collections::HashMap<i64, Listing> = self
-            .db
-            .get_listings_for_search(search.id)?
-            .into_iter()
-            .map(|l| (l.id, l))
-            .collect();
+        let existing_listings: std::collections::HashMap<i64, Listing> =
+            self.db.get_listings_for_search(search.id)?.into_iter().map(|l| (l.id, l)).collect();
 
         for offer in filtered_offers {
             let price = offer.get_price();
@@ -117,9 +104,7 @@ impl<'a> SearchTracker<'a> {
                     if let Some(existing) = existing_listings.get(&offer.id) {
                         if let (Some(old_price), Some(new_price)) = (existing.price, price) {
                             if new_price < old_price {
-                                result
-                                    .price_drops
-                                    .push((listing.clone(), old_price, new_price));
+                                result.price_drops.push((listing.clone(), old_price, new_price));
                             }
                         }
                     }
@@ -133,11 +118,7 @@ impl<'a> SearchTracker<'a> {
         let analyzer = PriceAnalyzer::new(&stats, search.max_price);
 
         // Mark deals
-        for listing in result
-            .new_listings
-            .iter()
-            .chain(result.updated_listings.iter())
-        {
+        for listing in result.new_listings.iter().chain(result.updated_listings.iter()) {
             if analyzer.is_deal(listing.price) {
                 self.db.mark_as_deal(listing.id, true)?;
                 if let Some(updated) = self.db.get_listing(listing.id)? {
@@ -165,10 +146,7 @@ impl<'a> SearchTracker<'a> {
             match self.run_search(&search, max_results_per_search).await {
                 Ok(result) => results.push(result),
                 Err(e) => {
-                    warn!(
-                        "Failed to run search '{}' (id={}): {}",
-                        search.name, search.id, e
-                    );
+                    warn!("Failed to run search '{}' (id={}): {}", search.name, search.id, e);
                 }
             }
 

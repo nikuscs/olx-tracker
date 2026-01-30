@@ -147,9 +147,7 @@ impl Database {
     }
 
     pub fn delete_search(&self, id: i64) -> Result<bool> {
-        let rows = self
-            .conn
-            .execute("DELETE FROM searches WHERE id = ?1", params![id])?;
+        let rows = self.conn.execute("DELETE FROM searches WHERE id = ?1", params![id])?;
         Ok(rows > 0)
     }
 
@@ -185,17 +183,7 @@ impl Database {
                 "UPDATE listings SET title = ?2, price = ?3, currency = ?4, url = ?5,
                  city = ?6, region = ?7, seller_name = ?8, last_seen_at = ?9
                  WHERE id = ?1",
-                params![
-                    id,
-                    title,
-                    price,
-                    currency,
-                    url,
-                    city,
-                    region,
-                    seller_name,
-                    now
-                ],
+                params![id, title, price, currency, url, city, region, seller_name, now],
             )?;
 
             // Record price change if different
@@ -436,9 +424,8 @@ mod tests {
     fn test_search_crud() {
         let db = Database::open_in_memory().unwrap();
 
-        let id = db
-            .create_search("Test", "iphone", Some(500.0), Some("Porto"), Some(30), None)
-            .unwrap();
+        let id =
+            db.create_search("Test", "iphone", Some(500.0), Some("Porto"), Some(30), None).unwrap();
 
         let search = db.get_search(id).unwrap().unwrap();
         assert_eq!(search.name, "Test");
@@ -457,9 +444,7 @@ mod tests {
     fn test_listing_upsert() {
         let db = Database::open_in_memory().unwrap();
 
-        let search_id = db
-            .create_search("Test", "iphone", None, None, None, None)
-            .unwrap();
+        let search_id = db.create_search("Test", "iphone", None, None, None, None).unwrap();
 
         // Insert new listing
         let is_new = db
@@ -506,46 +491,11 @@ mod tests {
     fn test_search_stats() {
         let db = Database::open_in_memory().unwrap();
 
-        let search_id = db
-            .create_search("Test", "iphone", None, None, None, None)
-            .unwrap();
+        let search_id = db.create_search("Test", "iphone", None, None, None, None).unwrap();
 
-        db.upsert_listing(
-            1,
-            search_id,
-            "A",
-            Some(100.0),
-            "EUR",
-            "url1",
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        db.upsert_listing(
-            2,
-            search_id,
-            "B",
-            Some(200.0),
-            "EUR",
-            "url2",
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-        db.upsert_listing(
-            3,
-            search_id,
-            "C",
-            Some(300.0),
-            "EUR",
-            "url3",
-            None,
-            None,
-            None,
-        )
-        .unwrap();
+        db.upsert_listing(1, search_id, "A", Some(100.0), "EUR", "url1", None, None, None).unwrap();
+        db.upsert_listing(2, search_id, "B", Some(200.0), "EUR", "url2", None, None, None).unwrap();
+        db.upsert_listing(3, search_id, "C", Some(300.0), "EUR", "url3", None, None, None).unwrap();
 
         let stats = db.update_search_stats(search_id).unwrap();
         assert_eq!(stats.avg_price, Some(200.0));

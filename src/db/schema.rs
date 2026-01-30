@@ -14,11 +14,7 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     )?;
 
     let current_version: i32 = conn
-        .query_row(
-            "SELECT COALESCE(MAX(version), 0) FROM schema_version",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT COALESCE(MAX(version), 0) FROM schema_version", [], |row| row.get(0))
         .unwrap_or(0);
 
     if current_version < 1 {
@@ -102,9 +98,7 @@ mod tests {
         run_migrations(&conn).unwrap();
 
         let version: i32 = conn
-            .query_row("SELECT MAX(version) FROM schema_version", [], |row| {
-                row.get(0)
-            })
+            .query_row("SELECT MAX(version) FROM schema_version", [], |row| row.get(0))
             .unwrap();
         assert_eq!(version, SCHEMA_VERSION);
     }

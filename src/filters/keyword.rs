@@ -13,9 +13,7 @@ impl Filter for KeywordFilter {
         let keywords: Vec<&str> = search.keyword.split_whitespace().collect();
 
         // All keywords must be present in the title
-        keywords
-            .iter()
-            .all(|kw: &&str| title_lower.contains(&kw.to_lowercase()))
+        keywords.iter().all(|kw: &&str| title_lower.contains(&kw.to_lowercase()))
     }
 
     fn name(&self) -> &'static str {

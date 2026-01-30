@@ -39,10 +39,7 @@ struct ListingPayload {
 
 impl WebhookNotifier {
     pub fn new(config: NotificationConfig) -> Self {
-        Self {
-            client: Client::new(),
-            config,
-        }
+        Self { client: Client::new(), config }
     }
 
     async fn send_webhook(&self, payload: &WebhookPayload) -> Result<()> {
@@ -51,19 +48,10 @@ impl WebhookNotifier {
             return Ok(());
         };
 
-        info!(
-            "Sending webhook: {} ({} listings)",
-            payload.event,
-            payload.listings.len()
-        );
+        info!("Sending webhook: {} ({} listings)", payload.event, payload.listings.len());
 
-        let response = self
-            .client
-            .post(url)
-            .json(payload)
-            .send()
-            .await
-            .context("Failed to send webhook")?;
+        let response =
+            self.client.post(url).json(payload).send().await.context("Failed to send webhook")?;
 
         if !response.status().is_success() {
             warn!("Webhook returned non-success status: {}", response.status());
@@ -112,11 +100,8 @@ impl Notifier for WebhookNotifier {
             listings: drops
                 .iter()
                 .map(|(l, old, new)| {
-                    let discount = if *old > 0.0 {
-                        Some(((old - new) / old) * 100.0)
-                    } else {
-                        None
-                    };
+                    let discount =
+                        if *old > 0.0 { Some(((old - new) / old) * 100.0) } else { None };
 
                     ListingPayload {
                         id: l.id,

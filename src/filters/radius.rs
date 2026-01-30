@@ -49,10 +49,7 @@ mod tests {
             url: "https://test.com".to_string(),
             params: vec![],
             location: city.map(|c| OfferLocation {
-                city: Some(LocationCity {
-                    id: Some(1),
-                    name: c.to_string(),
-                }),
+                city: Some(LocationCity { id: Some(1), name: c.to_string() }),
                 region: None,
             }),
             user: None,

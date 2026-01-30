@@ -79,9 +79,7 @@ pub struct DatabaseConfig {
 
 impl Default for DatabaseConfig {
     fn default() -> Self {
-        Self {
-            path: default_db_path(),
-        }
+        Self { path: default_db_path() }
     }
 }
 
@@ -170,10 +168,7 @@ mod tests {
 
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.proxy.enabled);
-        assert_eq!(
-            config.proxy.url,
-            Some("socks5://localhost:1080".to_string())
-        );
+        assert_eq!(config.proxy.url, Some("socks5://localhost:1080".to_string()));
         assert_eq!(config.api.request_delay_ms, 2000);
         assert_eq!(config.database.path, "custom.db");
     }

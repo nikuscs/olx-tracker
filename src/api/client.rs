@@ -39,9 +39,8 @@ impl Default for SearchParams {
 
 impl OlxClient {
     pub fn new(config: &Config) -> Result<Self> {
-        let mut client_builder = Client::builder()
-            .user_agent(&config.api.user_agent)
-            .timeout(Duration::from_secs(30));
+        let mut client_builder =
+            Client::builder().user_agent(&config.api.user_agent).timeout(Duration::from_secs(30));
 
         if config.proxy.enabled {
             if let Some(proxy_url) = &config.proxy.url {
@@ -63,11 +62,7 @@ impl OlxClient {
     }
 
     pub async fn search(&self, params: &SearchParams) -> Result<SearchResponse> {
-        let mut url = format!(
-            "{}?query={}",
-            self.base_url,
-            urlencoding::encode(&params.query)
-        );
+        let mut url = format!("{}?query={}", self.base_url, urlencoding::encode(&params.query));
 
         url.push_str(&format!("&offset={}&limit={}", params.offset, params.limit));
 
@@ -100,10 +95,8 @@ impl OlxClient {
             anyhow::bail!("API request failed with status {status}: {body}");
         }
 
-        let result: SearchResponse = response
-            .json()
-            .await
-            .context("Failed to parse search response")?;
+        let result: SearchResponse =
+            response.json().await.context("Failed to parse search response")?;
 
         debug!(
             "Found {} listings (total: {:?})",

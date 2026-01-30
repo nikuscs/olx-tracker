@@ -1,6 +1,5 @@
 # Rust
 /target/
-Cargo.lock
 
 # Database
 *.db
@@ -17,4 +16,7 @@ config.toml
 
 # macOS
 .DS_Store
-.claude/
+
+# Claude local settings (not skills)
+.claude/settings.local.json
+.conductor/

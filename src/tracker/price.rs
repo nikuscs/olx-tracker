@@ -7,10 +7,7 @@ pub struct PriceAnalyzer {
 
 impl PriceAnalyzer {
     pub const fn new(stats: &SearchStats, max_price_threshold: Option<f64>) -> Self {
-        Self {
-            avg_price: stats.avg_price,
-            max_price_threshold,
-        }
+        Self { avg_price: stats.avg_price, max_price_threshold }
     }
 
     /// Check if a price qualifies as a "deal"
@@ -58,11 +55,7 @@ impl PriceAnalyzer {
         let price = price?;
         let avg = self.avg_price?;
 
-        if avg > 0.0 {
-            Some(((avg - price) / avg) * 100.0)
-        } else {
-            None
-        }
+        if avg > 0.0 { Some(((avg - price) / avg) * 100.0) } else { None }
     }
 
     pub const fn avg_price(&self) -> Option<f64> {

@@ -44,14 +44,8 @@ pub struct OfferParam {
 #[serde(untagged)]
 pub enum ParamValue {
     Simple(String),
-    Labeled {
-        value: Option<String>,
-        label: String,
-    },
-    Numeric {
-        value: f64,
-        label: Option<String>,
-    },
+    Labeled { value: Option<String>, label: String },
+    Numeric { value: f64, label: Option<String> },
 }
 
 impl OfferParam {
@@ -102,24 +96,15 @@ pub struct OfferUser {
 
 impl OfferData {
     pub fn get_price(&self) -> Option<f64> {
-        self.params
-            .iter()
-            .find(|p| p.key == "price")
-            .and_then(OfferParam::get_numeric_value)
+        self.params.iter().find(|p| p.key == "price").and_then(OfferParam::get_numeric_value)
     }
 
     pub fn get_city(&self) -> Option<String> {
-        self.location
-            .as_ref()
-            .and_then(|l| l.city.as_ref())
-            .map(|c| c.name.clone())
+        self.location.as_ref().and_then(|l| l.city.as_ref()).map(|c| c.name.clone())
     }
 
     pub fn get_region(&self) -> Option<String> {
-        self.location
-            .as_ref()
-            .and_then(|l| l.region.as_ref())
-            .map(|r| r.name.clone())
+        self.location.as_ref().and_then(|l| l.region.as_ref()).map(|r| r.name.clone())
     }
 
     pub fn get_seller_name(&self) -> Option<String> {
