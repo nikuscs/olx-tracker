@@ -1,0 +1,27 @@
+[auth]
+# Bearer token from browser request (required)
+# Get this from browser DevTools -> Network tab -> find a GraphQL request -> copy Authorization header
+bearer_token = "eyJ..."
+
+[proxy]
+enabled = false
+# Proxy URL - supports http, https, socks5
+url = "socks5://127.0.0.1:1080"
+
+[api]
+base_url = "https://www.olx.pt/api/v1/offers"
+user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+# Delay between requests in milliseconds (rate limiting)
+request_delay_ms = 1000
+
+[notifications]
+# Webhook URL for notifications (optional)
+webhook_url = "https://your-webhook.example.com/notify"
+notify_on_new_listing = true
+notify_on_price_drop = true
+# Notify when listing price is below average for the search
+notify_on_deal = true
+
+[database]
+# Path to SQLite database file
+path = "olx_tracker.db"

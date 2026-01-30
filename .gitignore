@@ -1,0 +1,20 @@
+# Rust
+/target/
+Cargo.lock
+
+# Database
+*.db
+
+# Config (contains secrets)
+config.toml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.claude/
