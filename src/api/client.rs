@@ -10,7 +10,7 @@ use super::models::{OfferData, SearchResponse};
 pub struct OlxClient {
     client: Client,
     base_url: String,
-    bearer_token: String,
+    bearer_token: Option<String>,
     request_delay: Duration,
 }
 
@@ -55,7 +55,7 @@ impl OlxClient {
 
         Ok(Self {
             client,
-            base_url: config.api.base_url.clone(),
+            base_url: config.api.get_base_url().to_string(),
             bearer_token: config.auth.bearer_token.clone(),
             request_delay: Duration::from_millis(config.api.request_delay_ms),
         })
@@ -80,14 +80,14 @@ impl OlxClient {
 
         debug!("Searching OLX: {}", url);
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", self.bearer_token))
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .context("Failed to send search request")?;
+        let mut request = self.client.get(&url).header("Accept", "application/json");
+
+        // Add bearer token only if provided (OLX search is public)
+        if let Some(token) = &self.bearer_token {
+            request = request.header("Authorization", format!("Bearer {token}"));
+        }
+
+        let response = request.send().await.context("Failed to send search request")?;
 
         let status = response.status();
         if !status.is_success() {

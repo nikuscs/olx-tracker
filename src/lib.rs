@@ -6,8 +6,8 @@ pub mod notify;
 pub mod tracker;
 
 pub use api::OlxClient;
-pub use config::Config;
+pub use config::{Config, DealConfig, OlxCountry};
 pub use db::Database;
 pub use filters::FilterChain;
-pub use notify::{Notifier, WebhookNotifier};
+pub use notify::{DiscordNotifier, MultiNotifier, Notifier, WebhookNotifier};
 pub use tracker::{PriceAnalyzer, SearchTracker};

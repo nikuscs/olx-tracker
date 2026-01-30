@@ -1,9 +1,63 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::Path;
+use std::str::FromStr;
 
-#[derive(Debug, Deserialize, Clone)]
+/// Supported OLX countries
+#[derive(Debug, Deserialize, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OlxCountry {
+    #[default]
+    #[serde(alias = "PT")]
+    Pt,
+    #[serde(alias = "PL")]
+    Pl,
+    #[serde(alias = "UA")]
+    Ua,
+    #[serde(alias = "RO")]
+    Ro,
+    #[serde(alias = "BG")]
+    Bg,
+    #[serde(alias = "KZ")]
+    Kz,
+    #[serde(alias = "UZ")]
+    Uz,
+}
+
+impl OlxCountry {
+    pub const fn api_base_url(self) -> &'static str {
+        match self {
+            Self::Pt => "https://www.olx.pt/api/v1/offers",
+            Self::Pl => "https://www.olx.pl/api/v1/offers",
+            Self::Ua => "https://www.olx.ua/api/v1/offers",
+            Self::Ro => "https://www.olx.ro/api/v1/offers",
+            Self::Bg => "https://www.olx.bg/api/v1/offers",
+            Self::Kz => "https://www.olx.kz/api/v1/offers",
+            Self::Uz => "https://www.olx.uz/api/v1/offers",
+        }
+    }
+}
+
+impl FromStr for OlxCountry {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "pt" | "portugal" => Ok(Self::Pt),
+            "pl" | "poland" => Ok(Self::Pl),
+            "ua" | "ukraine" => Ok(Self::Ua),
+            "ro" | "romania" => Ok(Self::Ro),
+            "bg" | "bulgaria" => Ok(Self::Bg),
+            "kz" | "kazakhstan" => Ok(Self::Kz),
+            "uz" | "uzbekistan" => Ok(Self::Uz),
+            _ => Err(format!("Unknown country: {s}. Valid: pt, pl, ua, ro, bg, kz, uz")),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct Config {
+    #[serde(default)]
     pub auth: AuthConfig,
     #[serde(default)]
     pub proxy: ProxyConfig,
@@ -13,11 +67,15 @@ pub struct Config {
     pub notifications: NotificationConfig,
     #[serde(default)]
     pub database: DatabaseConfig,
+    #[serde(default)]
+    pub deals: DealConfig,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct AuthConfig {
-    pub bearer_token: String,
+    /// Bearer token (optional - OLX search is public)
+    #[serde(default)]
+    pub bearer_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -30,8 +88,11 @@ pub struct ProxyConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApiConfig {
-    #[serde(default = "default_base_url")]
-    pub base_url: String,
+    /// OLX country (pt, pl, ua, ro, bg, kz, uz)
+    #[serde(default)]
+    pub country: OlxCountry,
+    /// Custom base URL (overrides country)
+    pub base_url: Option<String>,
     #[serde(default = "default_user_agent")]
     pub user_agent: String,
     #[serde(default = "default_request_delay")]
@@ -41,15 +102,18 @@ pub struct ApiConfig {
 impl Default for ApiConfig {
     fn default() -> Self {
         Self {
-            base_url: default_base_url(),
+            country: OlxCountry::default(),
+            base_url: None,
             user_agent: default_user_agent(),
             request_delay_ms: default_request_delay(),
         }
     }
 }
 
-fn default_base_url() -> String {
-    "https://www.olx.pt/api/v1/offers".to_string()
+impl ApiConfig {
+    pub fn get_base_url(&self) -> &str {
+        self.base_url.as_deref().unwrap_or_else(|| self.country.api_base_url())
+    }
 }
 
 fn default_user_agent() -> String {
@@ -62,13 +126,35 @@ const fn default_request_delay() -> u64 {
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct NotificationConfig {
+    /// Generic webhook URL
     pub webhook_url: Option<String>,
+    /// Discord webhook URL (uses Discord-specific formatting)
+    pub discord_webhook_url: Option<String>,
     #[serde(default)]
     pub notify_on_new_listing: bool,
     #[serde(default)]
     pub notify_on_price_drop: bool,
     #[serde(default)]
     pub notify_on_deal: bool,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct DealConfig {
+    /// Percentage below average to consider a "good deal" (e.g., 30 = 30% below avg)
+    #[serde(default = "default_deal_threshold")]
+    pub threshold_pct: f64,
+    /// Target price - any listing at or below this is a deal
+    pub target_price: Option<f64>,
+}
+
+impl Default for DealConfig {
+    fn default() -> Self {
+        Self { threshold_pct: default_deal_threshold(), target_price: None }
+    }
+}
+
+const fn default_deal_threshold() -> f64 {
+    20.0 // 20% below average by default
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -99,28 +185,22 @@ impl Config {
         Ok(config)
     }
 
-    pub fn load_default() -> Result<Self> {
-        let paths = ["config.toml", "~/.config/olx-tracker/config.toml"];
+    /// Create a minimal config without a file (for CLI-only usage)
+    pub fn minimal() -> Self {
+        Self::default()
+    }
 
-        for path in &paths {
-            let expanded = shellexpand::tilde(path);
-            if Path::new(expanded.as_ref()).exists() {
-                return Self::load(expanded.as_ref());
-            }
-        }
-
-        anyhow::bail!(
-            "No config file found. Create config.toml or ~/.config/olx-tracker/config.toml"
-        )
+    pub fn load_or_default<P: AsRef<Path>>(path: P) -> Self {
+        Self::load(path).unwrap_or_default()
     }
 
     fn validate(&self) -> Result<()> {
-        if self.auth.bearer_token.is_empty() {
-            anyhow::bail!("Bearer token is required in config");
-        }
-
         if self.proxy.enabled && self.proxy.url.is_none() {
             anyhow::bail!("Proxy URL is required when proxy is enabled");
+        }
+
+        if self.deals.threshold_pct < 0.0 || self.deals.threshold_pct > 100.0 {
+            anyhow::bail!("Deal threshold percentage must be between 0 and 100");
         }
 
         Ok(())
@@ -128,20 +208,22 @@ impl Config {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_parse_minimal_config() {
         let toml = r#"
-            [auth]
-            bearer_token = "test_token"
+            [api]
+            country = "pt"
         "#;
 
         let config: Config = toml::from_str(toml).unwrap();
-        assert_eq!(config.auth.bearer_token, "test_token");
+        assert!(config.auth.bearer_token.is_none());
         assert!(!config.proxy.enabled);
         assert_eq!(config.api.request_delay_ms, 1000);
+        assert_eq!(config.api.country, OlxCountry::Pt);
     }
 
     #[test]
@@ -155,21 +237,42 @@ mod tests {
             url = "socks5://localhost:1080"
 
             [api]
-            base_url = "https://custom.api.com"
+            country = "pl"
             request_delay_ms = 2000
 
             [notifications]
             webhook_url = "https://webhook.example.com"
+            discord_webhook_url = "https://discord.com/api/webhooks/123/abc"
             notify_on_new_listing = true
 
             [database]
             path = "custom.db"
+
+            [deals]
+            threshold_pct = 30.0
+            target_price = 299.0
         "#;
 
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.proxy.enabled);
         assert_eq!(config.proxy.url, Some("socks5://localhost:1080".to_string()));
         assert_eq!(config.api.request_delay_ms, 2000);
+        assert_eq!(config.api.country, OlxCountry::Pl);
         assert_eq!(config.database.path, "custom.db");
+        assert_eq!(config.deals.threshold_pct, 30.0);
+        assert_eq!(config.deals.target_price, Some(299.0));
+    }
+
+    #[test]
+    fn test_country_urls() {
+        assert_eq!(OlxCountry::Pt.api_base_url(), "https://www.olx.pt/api/v1/offers");
+        assert_eq!(OlxCountry::Pl.api_base_url(), "https://www.olx.pl/api/v1/offers");
+    }
+
+    #[test]
+    fn test_default_config() {
+        let config = Config::default();
+        assert!(config.auth.bearer_token.is_none());
+        assert_eq!(config.deals.threshold_pct, 20.0);
     }
 }

@@ -1,26 +1,46 @@
+# OLX Price Tracker Configuration
+
 [auth]
-# Bearer token from browser request (required)
-# Get this from browser DevTools -> Network tab -> find a GraphQL request -> copy Authorization header
-bearer_token = "eyJ..."
+# Bearer token from browser request (optional - OLX search is public)
+# Only needed for authenticated features
+# bearer_token = "eyJ..."
+
+[api]
+# OLX country: pt, pl, ua, ro, bg, kz, uz (default: pt)
+country = "pt"
+
+# Custom base URL (overrides country setting)
+# base_url = "https://www.olx.pt/api/v1/offers"
+
+# User agent for requests
+user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+# Delay between requests in milliseconds (rate limiting)
+request_delay_ms = 1000
 
 [proxy]
 enabled = false
 # Proxy URL - supports http, https, socks5
-url = "socks5://127.0.0.1:1080"
-
-[api]
-base_url = "https://www.olx.pt/api/v1/offers"
-user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-# Delay between requests in milliseconds (rate limiting)
-request_delay_ms = 1000
+# url = "socks5://127.0.0.1:1080"
 
 [notifications]
-# Webhook URL for notifications (optional)
-webhook_url = "https://your-webhook.example.com/notify"
+# Generic webhook URL (receives JSON payloads)
+# webhook_url = "https://your-webhook.example.com/notify"
+
+# Discord webhook URL (uses Discord embeds)
+# discord_webhook_url = "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN"
+
+# What to notify about
 notify_on_new_listing = true
 notify_on_price_drop = true
-# Notify when listing price is below average for the search
 notify_on_deal = true
+
+[deals]
+# Percentage below average to consider a "deal" (e.g., 30 = 30% below avg)
+threshold_pct = 20.0
+
+# Target price - any listing at or below this is a deal (optional)
+# target_price = 299.0
 
 [database]
 # Path to SQLite database file

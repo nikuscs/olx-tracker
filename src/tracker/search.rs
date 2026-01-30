@@ -2,6 +2,7 @@ use anyhow::Result;
 use tracing::{debug, info, warn};
 
 use crate::api::{OlxClient, SearchParams};
+use crate::config::DealConfig;
 use crate::db::{Database, Listing, Search};
 use crate::filters::FilterChain;
 
@@ -11,6 +12,7 @@ pub struct SearchTracker<'a> {
     db: &'a Database,
     client: &'a OlxClient,
     filters: FilterChain,
+    deal_config: DealConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -23,8 +25,8 @@ pub struct TrackResult {
 }
 
 impl<'a> SearchTracker<'a> {
-    pub fn new(db: &'a Database, client: &'a OlxClient) -> Self {
-        Self { db, client, filters: FilterChain::default() }
+    pub fn new(db: &'a Database, client: &'a OlxClient, deal_config: DealConfig) -> Self {
+        Self { db, client, filters: FilterChain::default(), deal_config }
     }
 
     pub fn with_filters(mut self, filters: FilterChain) -> Self {
@@ -79,7 +81,6 @@ impl<'a> SearchTracker<'a> {
                             "Price drop detected for '{}': {} -> {}",
                             offer.title, old_price, new_price
                         );
-                        // Will be populated after upsert
                     }
                 }
             }
@@ -115,7 +116,7 @@ impl<'a> SearchTracker<'a> {
 
         // Update stats and detect deals
         let stats = self.db.update_search_stats(search.id)?;
-        let analyzer = PriceAnalyzer::new(&stats, search.max_price);
+        let analyzer = PriceAnalyzer::new(&stats, search.max_price, &self.deal_config);
 
         // Mark deals
         for listing in result.new_listings.iter().chain(result.updated_listings.iter()) {

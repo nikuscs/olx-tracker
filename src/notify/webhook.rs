@@ -11,7 +11,7 @@ use super::Notifier;
 
 pub struct WebhookNotifier {
     client: Client,
-    config: NotificationConfig,
+    webhook_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -39,11 +39,11 @@ struct ListingPayload {
 
 impl WebhookNotifier {
     pub fn new(config: NotificationConfig) -> Self {
-        Self { client: Client::new(), config }
+        Self { client: Client::new(), webhook_url: config.webhook_url }
     }
 
     async fn send_webhook(&self, payload: &WebhookPayload) -> Result<()> {
-        let Some(url) = &self.config.webhook_url else {
+        let Some(url) = &self.webhook_url else {
             debug!("No webhook URL configured, skipping notification");
             return Ok(());
         };
@@ -64,7 +64,7 @@ impl WebhookNotifier {
 #[async_trait]
 impl Notifier for WebhookNotifier {
     async fn notify_new_listings(&self, listings: &[Listing]) -> Result<()> {
-        if !self.config.notify_on_new_listing || listings.is_empty() {
+        if listings.is_empty() {
             return Ok(());
         }
 
@@ -91,7 +91,7 @@ impl Notifier for WebhookNotifier {
     }
 
     async fn notify_price_drops(&self, drops: &[(Listing, f64, f64)]) -> Result<()> {
-        if !self.config.notify_on_price_drop || drops.is_empty() {
+        if drops.is_empty() {
             return Ok(());
         }
 
@@ -123,7 +123,7 @@ impl Notifier for WebhookNotifier {
     }
 
     async fn notify_deals(&self, deals: &[Listing], avg_price: Option<f64>) -> Result<()> {
-        if !self.config.notify_on_deal || deals.is_empty() {
+        if deals.is_empty() {
             return Ok(());
         }
 

@@ -1,26 +1,59 @@
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 use olx_tracker::{
-    Config, Database, FilterChain, Notifier, OlxClient, SearchTracker, WebhookNotifier,
+    Config, Database, FilterChain, MultiNotifier, Notifier, OlxClient, SearchTracker,
 };
 
 #[derive(Parser)]
 #[command(name = "olx-tracker")]
-#[command(about = "Track OLX.pt listings, monitor prices, and alert on good deals")]
+#[command(about = "Track OLX listings, monitor prices, and alert on good deals")]
 #[command(version)]
 struct Cli {
-    /// Path to config file
+    /// Path to config file (optional if using CLI flags)
     #[arg(short, long, default_value = "config.toml")]
     config: String,
 
-    /// Path to database file (overrides config)
+    /// Path to database file
     #[arg(short, long, env = "OLX_TRACKER_DB")]
     db: Option<String>,
+
+    /// OLX country (pt, pl, ua, ro, bg, kz, uz)
+    #[arg(long, env = "OLX_COUNTRY")]
+    country: Option<String>,
+
+    /// Discord webhook URL for notifications
+    #[arg(long, env = "OLX_DISCORD_WEBHOOK")]
+    discord: Option<String>,
+
+    /// Generic webhook URL for notifications
+    #[arg(long, env = "OLX_WEBHOOK")]
+    webhook: Option<String>,
+
+    /// Deal threshold percentage below average (e.g., 30 = 30% below avg)
+    #[arg(long, env = "OLX_DEAL_THRESHOLD")]
+    deal_threshold: Option<f64>,
+
+    /// Target price - any listing at or below this is a deal
+    #[arg(long, env = "OLX_TARGET_PRICE")]
+    target_price: Option<f64>,
+
+    /// Notify on new listings
+    #[arg(long)]
+    notify_new: bool,
+
+    /// Notify on price drops
+    #[arg(long)]
+    notify_drops: bool,
+
+    /// Notify on deals
+    #[arg(long)]
+    notify_deals: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -38,7 +71,7 @@ enum Commands {
         #[arg(short, long)]
         keyword: String,
 
-        /// Maximum price threshold for deals
+        /// Maximum price threshold for deals (per-search)
         #[arg(short = 'p', long)]
         max_price: Option<f64>,
 
@@ -84,7 +117,7 @@ enum Commands {
         max_results: i32,
     },
 
-    /// Show deals (listings below average price or `max_price`)
+    /// Show deals (listings below average price or target price)
     Deals {
         /// Filter by search ID
         #[arg(short, long)]
@@ -124,8 +157,44 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    // Load config
-    let config = Config::load(&cli.config)?;
+    // Load config from file if it exists, otherwise use defaults
+    let mut config = if Path::new(&cli.config).exists() {
+        Config::load(&cli.config)?
+    } else {
+        Config::minimal()
+    };
+
+    // Override config with CLI flags
+    if let Some(country_str) = &cli.country {
+        config.api.country = country_str.parse().map_err(|e: String| anyhow::anyhow!("{e}"))?;
+    }
+
+    if let Some(discord_url) = &cli.discord {
+        config.notifications.discord_webhook_url = Some(discord_url.clone());
+    }
+
+    if let Some(webhook_url) = &cli.webhook {
+        config.notifications.webhook_url = Some(webhook_url.clone());
+    }
+
+    if let Some(threshold) = cli.deal_threshold {
+        config.deals.threshold_pct = threshold;
+    }
+
+    if let Some(target) = cli.target_price {
+        config.deals.target_price = Some(target);
+    }
+
+    // CLI flags override config for notifications
+    if cli.notify_new {
+        config.notifications.notify_on_new_listing = true;
+    }
+    if cli.notify_drops {
+        config.notifications.notify_on_price_drop = true;
+    }
+    if cli.notify_deals {
+        config.notifications.notify_on_deal = true;
+    }
 
     // Use CLI db path if provided, otherwise use config
     let db_path = cli.db.as_deref().unwrap_or(&config.database.path);
@@ -216,8 +285,8 @@ async fn cmd_run(
 ) -> Result<()> {
     let client = OlxClient::new(config)?;
     let filters = FilterChain::with_defaults();
-    let tracker = SearchTracker::new(db, &client).with_filters(filters);
-    let notifier = WebhookNotifier::new(config.notifications.clone());
+    let tracker = SearchTracker::new(db, &client, config.deals.clone()).with_filters(filters);
+    let notifier = MultiNotifier::from_config(config.notifications.clone());
 
     let results = if let Some(id) = search_id {
         let search =
@@ -238,9 +307,7 @@ async fn cmd_run(
                 result.new_listings.len(),
                 result.search_id
             );
-            if let Err(e) = notifier.notify_new_listings(&result.new_listings).await {
-                warn!("Failed to send new listings notification: {}", e);
-            }
+            notifier.notify_new_listings(&result.new_listings).await?;
         }
 
         if !result.price_drops.is_empty() {
@@ -249,16 +316,12 @@ async fn cmd_run(
                 result.price_drops.len(),
                 result.search_id
             );
-            if let Err(e) = notifier.notify_price_drops(&result.price_drops).await {
-                warn!("Failed to send price drop notification: {}", e);
-            }
+            notifier.notify_price_drops(&result.price_drops).await?;
         }
 
         if !result.deals.is_empty() {
             println!("Found {} deal(s) for search {}", result.deals.len(), result.search_id);
-            if let Err(e) = notifier.notify_deals(&result.deals, avg_price).await {
-                warn!("Failed to send deals notification: {}", e);
-            }
+            notifier.notify_deals(&result.deals, avg_price).await?;
         }
     }
 
