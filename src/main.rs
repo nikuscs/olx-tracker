@@ -7,7 +7,7 @@ use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 use olx_tracker::{
-    Config, Database, FilterChain, MultiNotifier, Notifier, OlxClient, SearchTracker,
+    Config, Database, FilterChain, MultiNotifier, Notifier, OlxClient, SearchTracker, SortOrder,
 };
 
 #[derive(Parser)]
@@ -86,6 +86,10 @@ enum Commands {
         /// OLX category ID
         #[arg(long)]
         category: Option<i64>,
+
+        /// Sort order: newest, cheapest, expensive, relevance
+        #[arg(short, long, default_value = "newest")]
+        sort: String,
     },
 
     /// List all saved searches
@@ -201,8 +205,8 @@ async fn main() -> Result<()> {
     let db = Database::open(db_path)?;
 
     match cli.command {
-        Commands::Add { name, keyword, max_price, city, radius, category } => {
-            cmd_add(&db, &name, &keyword, max_price, city, radius, category)?;
+        Commands::Add { name, keyword, max_price, city, radius, category, sort } => {
+            cmd_add(&db, &name, &keyword, max_price, city, radius, category, &sort)?;
         }
         Commands::List { all } => {
             cmd_list(&db, all)?;
@@ -230,6 +234,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_add(
     db: &Database,
     name: &str,
@@ -238,9 +243,14 @@ fn cmd_add(
     city: Option<String>,
     radius: Option<i32>,
     category: Option<i64>,
+    sort: &str,
 ) -> Result<()> {
-    let id = db.create_search(name, keyword, max_price, city.as_deref(), radius, category)?;
-    println!("Created search '{name}' with ID {id}");
+    // Validate sort order
+    let _: SortOrder = sort.parse().map_err(|e: String| anyhow::anyhow!("{e}"))?;
+
+    let id =
+        db.create_search(name, keyword, max_price, city.as_deref(), radius, category, Some(sort))?;
+    println!("Created search '{name}' with ID {id} (sort: {sort})");
     Ok(())
 }
 
@@ -253,23 +263,24 @@ fn cmd_list(db: &Database, include_inactive: bool) -> Result<()> {
     }
 
     println!(
-        "{:<4} {:<20} {:<20} {:<10} {:<15} {:<8}",
-        "ID", "Name", "Keyword", "Max €", "City", "Active"
+        "{:<4} {:<18} {:<18} {:<8} {:<12} {:<10} {:<6}",
+        "ID", "Name", "Keyword", "Max €", "City", "Sort", "Active"
     );
-    println!("{}", "-".repeat(80));
+    println!("{}", "-".repeat(85));
 
     for search in searches {
-        let max_price = search.max_price.map_or_else(|| "-".to_string(), |p| format!("{p:.2}"));
+        let max_price = search.max_price.map_or_else(|| "-".to_string(), |p| format!("{p:.0}"));
         let city = search.city.as_deref().unwrap_or("-");
         let active = if search.active { "Yes" } else { "No" };
 
         println!(
-            "{:<4} {:<20} {:<20} {:<10} {:<15} {:<8}",
+            "{:<4} {:<18} {:<18} {:<8} {:<12} {:<10} {:<6}",
             search.id,
-            truncate(&search.name, 18),
-            truncate(&search.keyword, 18),
+            truncate(&search.name, 16),
+            truncate(&search.keyword, 16),
             max_price,
-            truncate(city, 13),
+            truncate(city, 10),
+            truncate(&search.sort_order, 8),
             active
         );
     }

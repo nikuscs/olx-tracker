@@ -67,6 +67,7 @@ mod tests {
             city: city.map(std::string::ToString::to_string),
             radius_km: radius,
             category_id: None,
+            sort_order: "newest".to_string(),
             active: true,
             created_at: "2024-01-01".to_string(),
         }

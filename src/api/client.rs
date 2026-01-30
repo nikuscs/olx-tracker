@@ -1,11 +1,54 @@
 use anyhow::{Context, Result};
 use reqwest::{Client, Proxy};
+use std::str::FromStr;
 use std::time::Duration;
 use tracing::{debug, info};
 
 use crate::config::Config;
 
 use super::models::{OfferData, SearchResponse};
+
+/// Sort order for search results
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SortOrder {
+    /// Most recent first (default)
+    #[default]
+    Newest,
+    /// Cheapest first
+    PriceAsc,
+    /// Most expensive first
+    PriceDesc,
+    /// Most relevant first
+    Relevance,
+}
+
+impl SortOrder {
+    /// Returns the OLX API parameter value
+    pub const fn as_api_param(self) -> &'static str {
+        match self {
+            Self::Newest => "created_at:desc",
+            Self::PriceAsc => "filter_float_price:asc",
+            Self::PriceDesc => "filter_float_price:desc",
+            Self::Relevance => "relevance:desc",
+        }
+    }
+}
+
+impl FromStr for SortOrder {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "newest" | "new" | "recent" => Ok(Self::Newest),
+            "price_asc" | "price-asc" | "cheap" | "cheapest" => Ok(Self::PriceAsc),
+            "price_desc" | "price-desc" | "expensive" => Ok(Self::PriceDesc),
+            "relevance" | "relevant" => Ok(Self::Relevance),
+            _ => Err(format!(
+                "Unknown sort order: {s}. Valid: newest, cheapest, expensive, relevance"
+            )),
+        }
+    }
+}
 
 pub struct OlxClient {
     client: Client,
@@ -20,6 +63,7 @@ pub struct SearchParams {
     pub city: Option<String>,
     pub radius_km: Option<i32>,
     pub category_id: Option<i64>,
+    pub sort: SortOrder,
     pub offset: i32,
     pub limit: i32,
 }
@@ -31,6 +75,7 @@ impl Default for SearchParams {
             city: None,
             radius_km: None,
             category_id: None,
+            sort: SortOrder::default(),
             offset: 0,
             limit: 50,
         }
@@ -65,6 +110,7 @@ impl OlxClient {
         let mut url = format!("{}?query={}", self.base_url, urlencoding::encode(&params.query));
 
         url.push_str(&format!("&offset={}&limit={}", params.offset, params.limit));
+        url.push_str(&format!("&sort_by={}", params.sort.as_api_param()));
 
         if let Some(city) = &params.city {
             url.push_str(&format!("&city={}", urlencoding::encode(city)));
@@ -122,6 +168,7 @@ impl OlxClient {
                 city: params.city.clone(),
                 radius_km: params.radius_km,
                 category_id: params.category_id,
+                sort: params.sort,
                 offset,
                 limit,
             };

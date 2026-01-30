@@ -47,6 +47,7 @@ mod tests {
             city: None,
             radius_km: None,
             category_id: None,
+            sort_order: "newest".to_string(),
             active: true,
             created_at: "2024-01-01".to_string(),
         }

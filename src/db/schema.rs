@@ -1,8 +1,8 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-#[allow(dead_code)]
-const SCHEMA_VERSION: i32 = 1;
+#[cfg(test)]
+const SCHEMA_VERSION: i32 = 2;
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -19,6 +19,10 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
 
     if current_version < 1 {
         migrate_v1(conn)?;
+    }
+
+    if current_version < 2 {
+        migrate_v2(conn)?;
     }
 
     Ok(())
@@ -81,6 +85,19 @@ fn migrate_v1(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_price_history_listing_id ON price_history(listing_id);
 
         INSERT INTO schema_version (version) VALUES (1);
+        ",
+    )?;
+
+    Ok(())
+}
+
+fn migrate_v2(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "
+        -- Add sort_order column to searches (default: 'newest')
+        ALTER TABLE searches ADD COLUMN sort_order TEXT DEFAULT 'newest';
+
+        INSERT INTO schema_version (version) VALUES (2);
         ",
     )?;
 

@@ -35,13 +35,19 @@ impl<'a> SearchTracker<'a> {
     }
 
     pub async fn run_search(&self, search: &Search, max_results: i32) -> Result<TrackResult> {
-        info!("Running search '{}' (id={}, keyword='{}')", search.name, search.id, search.keyword);
+        info!(
+            "Running search '{}' (id={}, keyword='{}', sort='{}')",
+            search.name, search.id, search.keyword, search.sort_order
+        );
+
+        let sort = search.sort_order.parse().unwrap_or_default();
 
         let params = SearchParams {
             query: search.keyword.clone(),
             city: search.city.clone(),
             radius_km: search.radius_km,
             category_id: search.category_id,
+            sort,
             offset: 0,
             limit: 50,
         };
