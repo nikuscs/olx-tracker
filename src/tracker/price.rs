@@ -176,4 +176,32 @@ mod tests {
         assert_eq!(analyzer.discount_percentage(Some(100.0)), Some(0.0));
         assert!(analyzer.discount_percentage(Some(120.0)).unwrap() < 0.0);
     }
+
+    #[test]
+    fn test_is_good_deal_no_price() {
+        let stats = make_stats(Some(100.0));
+        let config = make_deal_config(20.0, None);
+        let analyzer = PriceAnalyzer::new(&stats, None, &config);
+
+        assert!(!analyzer.is_good_deal(None, 40.0));
+    }
+
+    #[test]
+    fn test_is_good_deal_no_avg_price() {
+        let stats = make_stats(None); // No average price
+        let config = make_deal_config(20.0, None);
+        let analyzer = PriceAnalyzer::new(&stats, None, &config);
+
+        assert!(!analyzer.is_good_deal(Some(50.0), 40.0));
+    }
+
+    #[test]
+    fn test_getters() {
+        let stats = make_stats(Some(123.45));
+        let config = make_deal_config(35.5, None);
+        let analyzer = PriceAnalyzer::new(&stats, None, &config);
+
+        assert_eq!(analyzer.avg_price(), Some(123.45));
+        assert_eq!(analyzer.threshold_pct(), 35.5);
+    }
 }

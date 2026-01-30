@@ -4,9 +4,10 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tracing::{error, info, warn};
 
+use crate::api::client::SearchClient;
 use crate::{Config, Database, FilterChain, MultiNotifier, Notifier, OlxClient, SearchTracker};
 
-use super::state::{DaemonHandle, MAX_DAEMON_ERRORS, AppState};
+use super::state::{AppState, DaemonHandle, MAX_DAEMON_ERRORS};
 
 /// Start a background daemon thread
 pub fn start_daemon(
@@ -114,16 +115,16 @@ pub async fn stop_daemon(state: &AppState) -> bool {
     true
 }
 
-/// Execute searches and send notifications
-async fn run_searches(
+/// Execute searches and send notifications (generic over client for testing)
+async fn run_searches_with_client<C: SearchClient>(
     db: &Database,
+    client: &C,
     config: &Config,
     search_id: Option<i64>,
     max_results: i32,
 ) -> anyhow::Result<(usize, usize)> {
-    let client = OlxClient::new(config)?;
     let filters = FilterChain::with_defaults();
-    let tracker = SearchTracker::new(db, &client, config.deals.clone()).with_filters(filters);
+    let tracker = SearchTracker::new(db, client, config.deals.clone()).with_filters(filters);
     let notifier = MultiNotifier::from_config(config.notifications.clone());
 
     let results = if let Some(id) = search_id {
@@ -155,6 +156,17 @@ async fn run_searches(
     Ok((total_new, total_deals))
 }
 
+/// Execute searches and send notifications (production version with real OlxClient)
+async fn run_searches(
+    db: &Database,
+    config: &Config,
+    search_id: Option<i64>,
+    max_results: i32,
+) -> anyhow::Result<(usize, usize)> {
+    let client = OlxClient::new(config)?;
+    run_searches_with_client(db, &client, config, search_id, max_results).await
+}
+
 /// Blocking wrapper for `run_searches` that creates its own runtime.
 ///
 /// This is necessary because rusqlite's Database is not Send/Sync, so we can't
@@ -176,7 +188,31 @@ pub fn run_searches_blocking(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::models::{OfferData, LocationResult};
+    use crate::api::SearchParams;
     use std::sync::Arc;
+
+    // Mock client for testing (NEVER makes real API calls)
+    struct MockClient;
+
+    #[async_trait::async_trait]
+    impl SearchClient for MockClient {
+        async fn lookup_city(&self, _city_name: &str) -> anyhow::Result<Option<LocationResult>> {
+            Ok(None)
+        }
+
+        async fn search_all(
+            &self,
+            _params: &SearchParams,
+            _max_results: i32,
+        ) -> anyhow::Result<Vec<OfferData>> {
+            Ok(vec![]) // Return empty results for tests
+        }
+
+        fn request_delay(&self) -> Duration {
+            Duration::from_millis(0)
+        }
+    }
 
     fn make_test_config() -> Config {
         Config::minimal()
@@ -224,6 +260,7 @@ mod tests {
         let config = make_test_config();
 
         // This should succeed but return (0, 0) since there are no searches
+        // Note: This still uses real OlxClient but with empty DB, so no actual API calls happen
         let result = run_searches_blocking(db_path, &config, None, 10);
         assert!(result.is_ok());
     }
@@ -232,8 +269,9 @@ mod tests {
     async fn test_run_searches_with_empty_db() {
         let db = Database::open_in_memory().unwrap();
         let config = make_test_config();
+        let client = MockClient; // Use mock client - NO REAL API CALLS
 
-        let result = run_searches(&db, &config, None, 10).await;
+        let result = run_searches_with_client(&db, &client, &config, None, 10).await;
         assert!(result.is_ok());
         let (new, deals) = result.unwrap();
         assert_eq!(new, 0);
@@ -244,9 +282,10 @@ mod tests {
     async fn test_run_searches_specific_search_not_found() {
         let db = Database::open_in_memory().unwrap();
         let config = make_test_config();
+        let client = MockClient; // Use mock client - NO REAL API CALLS
 
         // Try to run a search that doesn't exist
-        let result = run_searches(&db, &config, Some(999), 10).await;
+        let result = run_searches_with_client(&db, &client, &config, Some(999), 10).await;
         assert!(result.is_err());
     }
 
@@ -291,6 +330,8 @@ mod tests {
         let config = make_test_config();
 
         // Try to run a search that doesn't exist (tests error path)
+        // Note: This still uses real OlxClient but fails before making API calls
+        // because the search doesn't exist in the database
         let result = run_searches_blocking(":memory:", &config, Some(999), 10);
         assert!(result.is_err()); // Search won't exist
     }
