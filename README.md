@@ -6,7 +6,6 @@ Fast Rust CLI to track OLX listings and alert on good deals.
 
 ```bash
 cargo build --release
-cp config.example.toml config.toml
 ```
 
 ## 🔎 Quick Search
@@ -16,7 +15,6 @@ olx-tracker search "iphone 14"
 olx-tracker search "macbook" -m 10 -s cheapest
 olx-tracker search "ps5" --min-price 300 --max-price 500
 olx-tracker search "bike" --city Porto -r 30
-olx-tracker search "AYN odin" -s relevance --min-price 200 -m 10
 ```
 
 | Flag | Description |
@@ -31,46 +29,29 @@ olx-tracker search "AYN odin" -s relevance --min-price 200 -m 10
 ## 📋 Tracked Searches
 
 ```bash
-# Add
 olx-tracker add -n "PS5" -k "playstation 5"
 olx-tracker add -n "PS5 deals" -k "ps5" --min-price 300 -p 450 -s cheapest
 olx-tracker add -n "PS5 Porto" -k "ps5" --city Porto -r 30
-
-# Manage
 olx-tracker list
-olx-tracker list -a                    # include inactive
-olx-tracker toggle -s 1                # toggle active
+olx-tracker toggle -s 1
 olx-tracker remove -s 1
 olx-tracker stats -s 1
 olx-tracker deals
-olx-tracker deals -s 1
 ```
-
-| Flag | Description |
-|------|-------------|
-| `-n, --name` | Search name |
-| `-k, --keyword` | Search keyword |
-| `--min-price` | Min price filter |
-| `-p, --max-price` | Max price (deal threshold) |
-| `-s, --sort` | newest, cheapest, expensive, relevance |
-| `--city` | City name |
-| `-r, --radius` | Radius in km |
-| `--category` | OLX category ID |
 
 ## 🔄 Run & Daemon
 
 ```bash
 olx-tracker run
-olx-tracker run -s 1 -m 50             # specific search, max 50 results
-olx-tracker daemon                      # every 30 min
-olx-tracker daemon -i 15 -m 100        # every 15 min, max 100 results
+olx-tracker run -s 1 -m 50
+olx-tracker daemon
+olx-tracker daemon -i 15 -m 100
 ```
 
 ## 🌍 Countries
 
 ```bash
 olx-tracker --country pl search "iphone"
-export OLX_COUNTRY=ua
 ```
 
 Supported: `pt` `pl` `ua` `ro` `bg` `kz` `uz`
@@ -78,89 +59,66 @@ Supported: `pt` `pl` `ua` `ro` `bg` `kz` `uz`
 ## 🔔 Notifications
 
 ```bash
-# Discord
-olx-tracker --discord "https://discord.com/api/webhooks/ID/TOKEN" run
-export OLX_DISCORD_WEBHOOK="https://discord.com/api/webhooks/..."
-
-# Generic webhook
+olx-tracker --discord "https://discord.com/api/webhooks/..." run
 olx-tracker --webhook "https://your-server.com/notify" run
-export OLX_WEBHOOK="https://..."
-
-# Flags
 olx-tracker --notify-new --notify-drops --notify-deals run
 ```
 
 ## 🎯 Deals
 
 ```bash
-olx-tracker --deal-threshold 30 run    # 30% below average
-olx-tracker --target-price 299 run     # anything ≤299€
-export OLX_DEAL_THRESHOLD=25
-export OLX_TARGET_PRICE=350
+olx-tracker --deal-threshold 30 run
+olx-tracker --target-price 299 run
 ```
 
 ## 🌐 Proxy
 
-In `config.toml`:
-
-```toml
-[proxy]
-enabled = true
-url = "socks5://127.0.0.1:1080"
-# or
-url = "http://user:pass@proxy.example.com:8080"
+```bash
+olx-tracker --proxy "socks5://127.0.0.1:1080" search "iphone"
+olx-tracker --proxy "http://user:pass@proxy.com:8080" run
 ```
 
-Supports: `socks5://`, `http://`, `https://`
+## 🔧 User Agent
+
+```bash
+olx-tracker --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" search "iphone"
+```
 
 ## 🗄️ Database
 
 ```bash
 olx-tracker --db /path/to/custom.db list
-export OLX_TRACKER_DB=/path/to/custom.db
-```
-
-## 🔧 Config
-
-```toml
-[api]
-country = "pt"
-user_agent = "Mozilla/5.0..."
-request_delay_ms = 1000
-
-[proxy]
-enabled = false
-url = "socks5://127.0.0.1:1080"
-
-[notifications]
-webhook_url = "https://..."
-discord_webhook_url = "https://discord.com/api/webhooks/..."
-notify_on_new_listing = true
-notify_on_price_drop = true
-notify_on_deal = true
-
-[deals]
-threshold_pct = 20.0
-target_price = 299.0
-
-[database]
-path = "olx_tracker.db"
 ```
 
 ## 📖 Global Flags
 
-| Flag | Env | Description |
-|------|-----|-------------|
-| `-c, --config` | - | Config file |
-| `-d, --db` | `OLX_TRACKER_DB` | Database path |
-| `--country` | `OLX_COUNTRY` | OLX country |
-| `--discord` | `OLX_DISCORD_WEBHOOK` | Discord webhook |
-| `--webhook` | `OLX_WEBHOOK` | Generic webhook |
-| `--deal-threshold` | `OLX_DEAL_THRESHOLD` | % below avg |
-| `--target-price` | `OLX_TARGET_PRICE` | Target price |
-| `--notify-new` | - | Notify new listings |
-| `--notify-drops` | - | Notify price drops |
-| `--notify-deals` | - | Notify deals |
+| Flag | Description |
+|------|-------------|
+| `-c, --config` | Config file path |
+| `-d, --db` | Database path |
+| `--country` | OLX country |
+| `--proxy` | Proxy URL (socks5/http) |
+| `--user-agent` | Custom user agent |
+| `--discord` | Discord webhook URL |
+| `--webhook` | Generic webhook URL |
+| `--deal-threshold` | % below avg for deals |
+| `--target-price` | Max price for deals |
+| `--notify-new` | Notify new listings |
+| `--notify-drops` | Notify price drops |
+| `--notify-deals` | Notify deals |
+
+## 📦 Features
+
+- ⚡ Fast Rust implementation
+- 🔎 Quick search without database
+- 💾 SQLite storage with price history
+- 🔔 Discord & webhook notifications
+- 🎯 Smart deal detection
+- 💰 Min/max price filtering
+- 🌍 Multi-country support (7 OLX regions)
+- 📍 Location + radius filtering
+- 🔄 Daemon mode
+- 🌐 Proxy support (SOCKS5/HTTP)
 
 ## 📄 License
 

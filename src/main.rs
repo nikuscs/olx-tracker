@@ -56,6 +56,14 @@ struct Cli {
     #[arg(long)]
     notify_deals: bool,
 
+    /// Proxy URL (socks5://host:port or http://host:port)
+    #[arg(long)]
+    proxy: Option<String>,
+
+    /// Custom user agent string
+    #[arg(long)]
+    user_agent: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -233,6 +241,15 @@ async fn main() -> Result<()> {
     }
     if cli.notify_deals {
         config.notifications.notify_on_deal = true;
+    }
+
+    // Proxy and user-agent
+    if let Some(proxy_url) = &cli.proxy {
+        config.proxy.enabled = true;
+        config.proxy.url = Some(proxy_url.clone());
+    }
+    if let Some(ua) = &cli.user_agent {
+        config.api.user_agent = ua.clone();
     }
 
     // Use CLI db path if provided, otherwise use config
