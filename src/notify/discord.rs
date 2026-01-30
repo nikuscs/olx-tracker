@@ -207,4 +207,165 @@ mod tests {
         assert!(embed.description.contains("Porto, Norte"));
         assert_eq!(embed.url, Some("https://olx.pt/123".to_string()));
     }
+
+    #[test]
+    fn test_listing_to_embed_no_price() {
+        let mut listing = make_listing();
+        listing.price = None;
+
+        let embed = DiscordNotifier::listing_to_embed(&listing, 0x0034_98db, None);
+
+        assert!(embed.description.contains("N/A"));
+    }
+
+    #[test]
+    fn test_listing_to_embed_no_location() {
+        let mut listing = make_listing();
+        listing.city = None;
+        listing.region = None;
+
+        let embed = DiscordNotifier::listing_to_embed(&listing, 0x0034_98db, None);
+
+        assert!(embed.description.contains("Unknown"));
+    }
+
+    #[test]
+    fn test_listing_to_embed_city_only() {
+        let mut listing = make_listing();
+        listing.region = None;
+
+        let embed = DiscordNotifier::listing_to_embed(&listing, 0x0034_98db, None);
+
+        assert!(embed.description.contains("Porto"));
+        assert!(!embed.description.contains(","));
+    }
+
+    #[test]
+    fn test_listing_to_embed_no_seller() {
+        let mut listing = make_listing();
+        listing.seller_name = None;
+
+        let embed = DiscordNotifier::listing_to_embed(&listing, 0x0034_98db, None);
+
+        assert!(!embed.description.contains("Seller:"));
+    }
+
+    #[test]
+    fn test_listing_to_embed_with_extra_info() {
+        let listing = make_listing();
+        let embed = DiscordNotifier::listing_to_embed(
+            &listing,
+            0x0034_98db,
+            Some("Extra Info Here".to_string()),
+        );
+
+        assert!(embed.description.contains("Extra Info Here"));
+    }
+
+    #[test]
+    fn test_discord_notifier_creation() {
+        let notifier = DiscordNotifier::new("https://discord.com/webhook".to_string());
+        assert_eq!(notifier.webhook_url, "https://discord.com/webhook");
+    }
+
+    #[test]
+    fn test_new_listings_embed_creation() {
+        let listings = vec![make_listing()];
+        let embeds: Vec<_> = listings
+            .iter()
+            .map(|l| DiscordNotifier::listing_to_embed(l, 0x0034_98db, None))
+            .collect();
+
+        assert_eq!(embeds.len(), 1);
+        assert_eq!(embeds[0].color, 0x0034_98db);
+    }
+
+    #[test]
+    fn test_price_drop_discount_calculation() {
+        let old_price = 100.0;
+        let new_price = 80.0;
+        let discount = ((old_price - new_price) / old_price) * 100.0;
+
+        assert_eq!(discount, 20.0);
+    }
+
+    #[test]
+    fn test_price_drop_embed_creation() {
+        let listing = make_listing();
+        let old_price = 120.0;
+        let new_price = 100.0;
+        let discount = ((old_price - new_price) / old_price) * 100.0;
+
+        let info = format!(
+            "📉 **Price dropped:** {old_price:.2} € → {new_price:.2} € (-{discount:.1}%)"
+        );
+        let embed = DiscordNotifier::listing_to_embed(&listing, 0x002e_cc71, Some(info.clone()));
+
+        assert!(embed.description.contains(&info));
+        assert_eq!(embed.color, 0x002e_cc71);
+    }
+
+    #[test]
+    fn test_deals_embed_with_avg_price() {
+        let listing = make_listing(); // price = 100.0
+        let avg_price = 150.0;
+        let discount = ((avg_price - 100.0) / avg_price) * 100.0;
+
+        let info = format!("🔥 **{discount:.1}% below average** (avg: {avg_price:.2} €)");
+        let embed = DiscordNotifier::listing_to_embed(&listing, 0x00e7_4c3c, Some(info.clone()));
+
+        assert!(embed.description.contains(&info));
+        assert_eq!(embed.color, 0x00e7_4c3c);
+    }
+
+    #[test]
+    fn test_deals_embed_without_avg_price() {
+        let listing = make_listing();
+        let embed = DiscordNotifier::listing_to_embed(&listing, 0x00e7_4c3c, None);
+
+        assert_eq!(embed.color, 0x00e7_4c3c);
+        assert!(!embed.description.contains("below average"));
+    }
+
+    #[test]
+    fn test_chunking_large_list() {
+        let listings: Vec<Listing> = (0..25).map(|i| {
+            let mut l = make_listing();
+            l.id = i;
+            l
+        }).collect();
+
+        // Test that chunks work correctly (Discord limit is 10 embeds per message)
+        let chunks: Vec<_> = listings.chunks(10).collect();
+        assert_eq!(chunks.len(), 3); // 10, 10, 5
+        assert_eq!(chunks[0].len(), 10);
+        assert_eq!(chunks[1].len(), 10);
+        assert_eq!(chunks[2].len(), 5);
+    }
+
+    #[test]
+    fn test_embed_fields() {
+        let embed = DiscordEmbed {
+            title: "Test".to_string(),
+            description: "Desc".to_string(),
+            color: 0x123456,
+            fields: vec![],
+            url: Some("https://example.com".to_string()),
+        };
+
+        assert_eq!(embed.title, "Test");
+        assert_eq!(embed.fields.len(), 0);
+    }
+
+    #[test]
+    fn test_discord_webhook_payload_structure() {
+        let embed = DiscordNotifier::listing_to_embed(&make_listing(), 0x0034_98db, None);
+        let payload = DiscordWebhook {
+            content: Some("Test content".to_string()),
+            embeds: vec![embed],
+        };
+
+        assert_eq!(payload.content, Some("Test content".to_string()));
+        assert_eq!(payload.embeds.len(), 1);
+    }
 }

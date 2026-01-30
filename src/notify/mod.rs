@@ -146,9 +146,9 @@ mod tests {
             url: format!("https://example.com/{id}"),
             city: Some("Porto".to_string()),
             region: Some("Norte".to_string()),
-            seller: Some("Test Seller".to_string()),
+            seller_name: Some("Test Seller".to_string()),
             first_seen_at: "2024-01-01T00:00:00Z".to_string(),
-            last_seen_at: "2024-01-01T00:00:00Z".to_string(),
+            last_seen_at: Some("2024-01-01T00:00:00Z".to_string()),
             is_deal: false,
         }
     }
@@ -225,7 +225,7 @@ mod tests {
     async fn test_notify_new_listings_enabled() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, true, true, true);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         let listings = vec![make_test_listing(1, Some(100.0)), make_test_listing(2, Some(200.0))];
 
@@ -240,7 +240,7 @@ mod tests {
     async fn test_notify_new_listings_disabled() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, false, true, true);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         let listings = vec![make_test_listing(1, Some(100.0))];
 
@@ -254,7 +254,7 @@ mod tests {
     async fn test_notify_new_listings_empty() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, true, true, true);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         multi.notify_new_listings(&[]).await.unwrap();
 
@@ -266,7 +266,7 @@ mod tests {
     async fn test_notify_price_drops_enabled() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, true, true, true);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         let drops = vec![(make_test_listing(1, Some(80.0)), 100.0, 80.0)];
 
@@ -281,7 +281,7 @@ mod tests {
     async fn test_notify_price_drops_disabled() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, true, false, true);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         let drops = vec![(make_test_listing(1, Some(80.0)), 100.0, 80.0)];
 
@@ -295,7 +295,7 @@ mod tests {
     async fn test_notify_price_drops_empty() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, true, true, true);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         multi.notify_price_drops(&[]).await.unwrap();
 
@@ -307,7 +307,7 @@ mod tests {
     async fn test_notify_deals_enabled() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, true, true, true);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         let deals = vec![make_test_listing(1, Some(50.0))];
 
@@ -322,7 +322,7 @@ mod tests {
     async fn test_notify_deals_disabled() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, true, true, false);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         let deals = vec![make_test_listing(1, Some(50.0))];
 
@@ -336,7 +336,7 @@ mod tests {
     async fn test_notify_deals_empty() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, true, true, true);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         multi.notify_deals(&[], Some(100.0)).await.unwrap();
 
@@ -348,7 +348,7 @@ mod tests {
     async fn test_notify_deals_no_avg_price() {
         let mock = MockNotifier::new();
         let config = make_test_config(None, None, true, true, true);
-        let mut multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
+        let multi = MultiNotifier { notifiers: vec![Box::new(mock.clone())], config };
 
         let deals = vec![make_test_listing(1, Some(50.0))];
 
@@ -364,7 +364,7 @@ mod tests {
         let mock1 = MockNotifier::new();
         let mock2 = MockNotifier::new();
         let config = make_test_config(None, None, true, true, true);
-        let mut multi = MultiNotifier {
+        let multi = MultiNotifier {
             notifiers: vec![Box::new(mock1.clone()), Box::new(mock2.clone())],
             config,
         };

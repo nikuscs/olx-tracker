@@ -172,3 +172,126 @@ pub fn run_searches_blocking(
         run_searches(&db, config, search_id, max_results).await
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn make_test_config() -> Config {
+        Config::minimal()
+    }
+
+    fn make_test_state() -> AppState {
+        AppState {
+            db_path: ":memory:".to_string(),
+            config: Config::minimal(),
+            api_key: Some("test_key".to_string()),
+            timeout: std::time::Duration::from_secs(30),
+            daemon: Arc::new(tokio::sync::Mutex::new(None)),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_stop_daemon_when_none_running() {
+        let state = make_test_state();
+        let result = stop_daemon(&state).await;
+        assert!(!result); // Should return false when no daemon is running
+    }
+
+    #[tokio::test]
+    async fn test_stop_daemon_when_running() {
+        let db_path = ":memory:".to_string();
+        let config = make_test_config();
+
+        let daemon = start_daemon(db_path, config, 60, 10);
+
+        let state = make_test_state();
+        *state.daemon.lock().await = Some(daemon);
+
+        let result = stop_daemon(&state).await;
+        assert!(result); // Should return true when daemon was stopped
+
+        // Verify daemon is actually stopped
+        let guard = state.daemon.lock().await;
+        assert!(guard.is_none());
+    }
+
+    #[test]
+    fn test_run_searches_blocking_with_empty_db() {
+        let _db = Database::open_in_memory().unwrap();
+        let db_path = ":memory:";
+        let config = make_test_config();
+
+        // This should succeed but return (0, 0) since there are no searches
+        let result = run_searches_blocking(db_path, &config, None, 10);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_searches_with_empty_db() {
+        let db = Database::open_in_memory().unwrap();
+        let config = make_test_config();
+
+        let result = run_searches(&db, &config, None, 10).await;
+        assert!(result.is_ok());
+        let (new, deals) = result.unwrap();
+        assert_eq!(new, 0);
+        assert_eq!(deals, 0);
+    }
+
+    #[tokio::test]
+    async fn test_run_searches_specific_search_not_found() {
+        let db = Database::open_in_memory().unwrap();
+        let config = make_test_config();
+
+        // Try to run a search that doesn't exist
+        let result = run_searches(&db, &config, Some(999), 10).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_daemon_handle_creation() {
+        let db_path = ":memory:".to_string();
+        let config = make_test_config();
+
+        let daemon = start_daemon(db_path, config, 60, 10);
+
+        // Signal stop immediately
+        let _ = daemon.stop_tx.send(());
+
+        // Wait for thread to complete
+        let join_result = daemon.handle.join();
+        assert!(join_result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_daemon_stops_on_signal() {
+        use std::time::Duration;
+
+        let db_path = ":memory:".to_string();
+        let config = make_test_config();
+
+        let daemon = start_daemon(db_path, config, 60, 10);
+
+        // Signal stop
+        let _ = daemon.stop_tx.send(());
+
+        // Wait briefly for the thread to stop
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Thread should complete without panicking
+        let join_result = daemon.handle.join();
+        assert!(join_result.is_ok());
+    }
+
+    #[test]
+    fn test_run_searches_blocking_specific_search() {
+        let _db = Database::open_in_memory().unwrap();
+        let config = make_test_config();
+
+        // Try to run a search that doesn't exist (tests error path)
+        let result = run_searches_blocking(":memory:", &config, Some(999), 10);
+        assert!(result.is_err()); // Search won't exist
+    }
+}
