@@ -156,7 +156,7 @@ async fn run_searches_with_client<C: SearchClient>(
     Ok((total_new, total_deals))
 }
 
-/// Execute searches and send notifications (production version with real OlxClient)
+/// Execute searches and send notifications (production version with real `OlxClient`)
 async fn run_searches(
     db: &Database,
     config: &Config,
@@ -188,8 +188,8 @@ pub fn run_searches_blocking(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::models::{OfferData, LocationResult};
     use crate::api::SearchParams;
+    use crate::api::models::{LocationResult, OfferData};
     use std::sync::Arc;
 
     // Mock client for testing (NEVER makes real API calls)

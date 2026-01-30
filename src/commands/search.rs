@@ -2,7 +2,7 @@ use anyhow::Result;
 use tracing::info;
 
 use olx_tracker::api::SearchParams;
-use olx_tracker::{format_results, Config, FormatParams, OlxClient, OutputFormat, SortOrder};
+use olx_tracker::{Config, FormatParams, OlxClient, OutputFormat, SortOrder, format_results};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn cmd_search(

@@ -237,7 +237,7 @@ mod tests {
         let embed = DiscordNotifier::listing_to_embed(&listing, 0x0034_98db, None);
 
         assert!(embed.description.contains("Porto"));
-        assert!(!embed.description.contains(","));
+        assert!(!embed.description.contains(','));
     }
 
     #[test]
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_new_listings_embed_creation() {
-        let listings = vec![make_listing()];
+        let listings = [make_listing()];
         let embeds: Vec<_> = listings
             .iter()
             .map(|l| DiscordNotifier::listing_to_embed(l, 0x0034_98db, None))
@@ -296,9 +296,8 @@ mod tests {
         let new_price = 100.0;
         let discount = ((old_price - new_price) / old_price) * 100.0;
 
-        let info = format!(
-            "📉 **Price dropped:** {old_price:.2} € → {new_price:.2} € (-{discount:.1}%)"
-        );
+        let info =
+            format!("📉 **Price dropped:** {old_price:.2} € → {new_price:.2} € (-{discount:.1}%)");
         let embed = DiscordNotifier::listing_to_embed(&listing, 0x002e_cc71, Some(info.clone()));
 
         assert!(embed.description.contains(&info));
@@ -329,11 +328,13 @@ mod tests {
 
     #[test]
     fn test_chunking_large_list() {
-        let listings: Vec<Listing> = (0..25).map(|i| {
-            let mut l = make_listing();
-            l.id = i;
-            l
-        }).collect();
+        let listings: Vec<Listing> = (0..25)
+            .map(|i| {
+                let mut l = make_listing();
+                l.id = i;
+                l
+            })
+            .collect();
 
         // Test that chunks work correctly (Discord limit is 10 embeds per message)
         let chunks: Vec<_> = listings.chunks(10).collect();
@@ -360,10 +361,8 @@ mod tests {
     #[test]
     fn test_discord_webhook_payload_structure() {
         let embed = DiscordNotifier::listing_to_embed(&make_listing(), 0x0034_98db, None);
-        let payload = DiscordWebhook {
-            content: Some("Test content".to_string()),
-            embeds: vec![embed],
-        };
+        let payload =
+            DiscordWebhook { content: Some("Test content".to_string()), embeds: vec![embed] };
 
         assert_eq!(payload.content, Some("Test content".to_string()));
         assert_eq!(payload.embeds.len(), 1);

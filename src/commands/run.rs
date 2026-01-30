@@ -3,7 +3,9 @@ use std::time::Duration;
 use anyhow::Result;
 use tracing::{error, info};
 
-use olx_tracker::{Config, Database, FilterChain, MultiNotifier, Notifier, OlxClient, SearchTracker};
+use olx_tracker::{
+    Config, Database, FilterChain, MultiNotifier, Notifier, OlxClient, SearchTracker,
+};
 
 pub async fn cmd_run(
     db: &Database,

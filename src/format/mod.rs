@@ -265,7 +265,12 @@ mod tests {
     use super::*;
     use crate::api::{LocationCity, OfferLocation, OfferParam, OfferPhoto, OfferUser, ParamValue};
 
-    fn create_test_offer(id: i64, title: &str, price: Option<f64>, city: Option<&str>) -> OfferData {
+    fn create_test_offer(
+        id: i64,
+        title: &str,
+        price: Option<f64>,
+        city: Option<&str>,
+    ) -> OfferData {
         let params = if let Some(p) = price {
             vec![OfferParam {
                 key: "price".to_string(),
@@ -277,11 +282,7 @@ mod tests {
         };
 
         let location = city.map(|c| OfferLocation {
-            city: Some(LocationCity {
-                id: Some(1),
-                name: c.to_string(),
-                normalized_name: None,
-            }),
+            city: Some(LocationCity { id: Some(1), name: c.to_string(), normalized_name: None }),
             region: None,
         });
 
@@ -291,10 +292,7 @@ mod tests {
             url: format!("https://example.com/{id}"),
             params,
             location,
-            user: Some(OfferUser {
-                id: Some(100),
-                name: Some("Test Seller".to_string()),
-            }),
+            user: Some(OfferUser { id: Some(100), name: Some("Test Seller".to_string()) }),
             photos: vec![OfferPhoto {
                 id: 1,
                 filename: "photo.jpg".to_string(),
@@ -365,13 +363,21 @@ mod tests {
         let output = format_table("query", "newest", &offers, None, None);
 
         assert!(output.contains("Free Item"));
-        assert!(output.contains("-")); // No price shown as "-"
+        assert!(output.contains('-')); // No price shown as "-"
     }
 
     #[test]
     fn test_format_json_structure() {
         let offers = vec![create_test_offer(1, "Test Item", Some(100.0), Some("Lisbon"))];
-        let output = format_json("query", "newest", &offers, Some(50.0), Some(150.0), Some("Lisbon".to_string()), Some(10));
+        let output = format_json(
+            "query",
+            "newest",
+            &offers,
+            Some(50.0),
+            Some(150.0),
+            Some("Lisbon".to_string()),
+            Some(10),
+        );
 
         let json: serde_json::Value = serde_json::from_str(&output).expect("Valid JSON");
 

@@ -248,10 +248,7 @@ mod tests {
             params: vec![],
             location: Some(OfferLocation {
                 city: None,
-                region: Some(LocationRegion {
-                    id: Some(10),
-                    name: "Norte".to_string(),
-                }),
+                region: Some(LocationRegion { id: Some(10), name: "Norte".to_string() }),
             }),
             user: None,
             photos: vec![],
@@ -367,11 +364,7 @@ mod tests {
 
     #[test]
     fn test_param_value_none() {
-        let param = OfferParam {
-            key: "empty".to_string(),
-            name: "Empty".to_string(),
-            value: None,
-        };
+        let param = OfferParam { key: "empty".to_string(), name: "Empty".to_string(), value: None };
 
         assert_eq!(param.get_value(), None);
         assert_eq!(param.get_numeric_value(), None);

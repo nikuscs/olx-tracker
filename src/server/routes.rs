@@ -1,16 +1,15 @@
 //! Router setup and route configuration
 
 use axum::{
-    Router,
-    middleware,
+    Router, middleware,
     routing::{get, post},
 };
 
 use super::auth::auth_middleware;
 use super::handlers::{
     add_search_handler, daemon_handler, daemon_stop_handler, deals_handler, health,
-    list_searches_handler, remove_search_handler, run_handler, search_handler,
-    stats_handler, toggle_search_handler,
+    list_searches_handler, remove_search_handler, run_handler, search_handler, stats_handler,
+    toggle_search_handler,
 };
 use super::state::AppState;
 

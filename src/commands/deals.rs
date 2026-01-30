@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use olx_tracker::{truncate, Database};
+use olx_tracker::{Database, truncate};
 
 pub fn cmd_deals(db: &Database, search_id: Option<i64>) -> Result<()> {
     let deals = db.get_deals(search_id)?;

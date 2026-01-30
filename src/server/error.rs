@@ -1,9 +1,9 @@
 //! Error types and handling for the HTTP API
 
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 
 use super::models::ErrorResponse;

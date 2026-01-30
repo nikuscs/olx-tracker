@@ -278,10 +278,10 @@ mod tests {
 
     #[test]
     fn test_validation_proxy_enabled_without_url() {
-        let toml = r#"
+        let toml = r"
             [proxy]
             enabled = true
-        "#;
+        ";
 
         let config: Config = toml::from_str(toml).unwrap();
         let result = config.validate();
@@ -291,10 +291,10 @@ mod tests {
 
     #[test]
     fn test_validation_negative_deal_threshold() {
-        let toml = r#"
+        let toml = r"
             [deals]
             threshold_pct = -10.0
-        "#;
+        ";
 
         let config: Config = toml::from_str(toml).unwrap();
         let result = config.validate();
@@ -304,10 +304,10 @@ mod tests {
 
     #[test]
     fn test_validation_deal_threshold_above_100() {
-        let toml = r#"
+        let toml = r"
             [deals]
             threshold_pct = 150.0
-        "#;
+        ";
 
         let config: Config = toml::from_str(toml).unwrap();
         let result = config.validate();
@@ -364,8 +364,14 @@ mod tests {
         "#;
 
         let config: Config = toml::from_str(toml).unwrap();
-        assert_eq!(config.notifications.webhook_url, Some("https://webhook.example.com".to_string()));
-        assert_eq!(config.notifications.discord_webhook_url, Some("https://discord.example.com".to_string()));
+        assert_eq!(
+            config.notifications.webhook_url,
+            Some("https://webhook.example.com".to_string())
+        );
+        assert_eq!(
+            config.notifications.discord_webhook_url,
+            Some("https://discord.example.com".to_string())
+        );
         assert!(config.notifications.notify_on_new_listing);
         assert!(config.notifications.notify_on_price_drop);
         assert!(config.notifications.notify_on_deal);

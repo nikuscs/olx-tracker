@@ -184,7 +184,7 @@ mod tests {
         chain.add(Box::new(AlwaysPass));
         chain.add(Box::new(AlwaysFail));
 
-        let debug_str = format!("{:?}", chain);
+        let debug_str = format!("{chain:?}");
         assert!(debug_str.contains("FilterChain"));
         assert!(debug_str.contains("filter_count"));
     }

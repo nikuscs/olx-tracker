@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use olx_tracker::{truncate, Database};
+use olx_tracker::{Database, truncate};
 
 pub fn cmd_list(db: &Database, include_inactive: bool) -> Result<()> {
     let searches = db.list_searches(!include_inactive)?;

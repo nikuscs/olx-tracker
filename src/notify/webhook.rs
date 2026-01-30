@@ -203,14 +203,15 @@ mod tests {
     #[test]
     fn test_webhook_payload_with_price_drop() {
         let listing = make_test_listing(1, "iPhone", Some(80.0));
-        let drops = vec![(listing, 100.0, 80.0)];
+        let drops = [(listing, 100.0, 80.0)];
 
         let payload = WebhookPayload {
             event: "price_drops".to_string(),
             listings: drops
                 .iter()
                 .map(|(l, old, new)| {
-                    let discount = if *old > 0.0 { Some(((old - new) / old) * 100.0) } else { None };
+                    let discount =
+                        if *old > 0.0 { Some(((old - new) / old) * 100.0) } else { None };
                     ListingPayload {
                         id: l.id,
                         title: l.title.clone(),
@@ -250,7 +251,7 @@ mod tests {
     #[test]
     fn test_webhook_payload_with_avg_price() {
         let listing = make_test_listing(1, "Deal", Some(50.0));
-        let deals = vec![listing];
+        let deals = [listing];
         let avg_price = Some(100.0);
 
         let payload = WebhookPayload {
@@ -259,7 +260,9 @@ mod tests {
                 .iter()
                 .map(|l| {
                     let discount = match (l.price, avg_price) {
-                        (Some(price), Some(avg)) if avg > 0.0 => Some(((avg - price) / avg) * 100.0),
+                        (Some(price), Some(avg)) if avg > 0.0 => {
+                            Some(((avg - price) / avg) * 100.0)
+                        }
                         _ => None,
                     };
                     ListingPayload {
@@ -367,11 +370,8 @@ mod tests {
         };
 
         let notifier = WebhookNotifier::new(config);
-        let payload = WebhookPayload {
-            event: "test".to_string(),
-            listings: vec![],
-            avg_price: None,
-        };
+        let payload =
+            WebhookPayload { event: "test".to_string(), listings: vec![], avg_price: None };
 
         let result = notifier.send_webhook(&payload).await;
         assert!(result.is_ok()); // Should return Ok without sending
@@ -389,7 +389,7 @@ mod tests {
                 currency: listing.currency.clone(),
                 url: listing.url.clone(),
                 city: listing.city.clone(),
-                seller: listing.seller_name.clone(),
+                seller: listing.seller_name,
                 old_price: None,
                 discount_pct: None,
             }],

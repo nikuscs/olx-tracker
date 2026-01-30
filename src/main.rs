@@ -4,9 +4,9 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
-use olx_tracker::server;
 use olx_tracker::Config;
 use olx_tracker::Database;
+use olx_tracker::server;
 
 mod commands;
 

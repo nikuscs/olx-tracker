@@ -1,6 +1,6 @@
 //! HTTP request handlers
 
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use chrono::{Duration as ChronoDuration, Utc};
 
 use crate::api::SearchParams;
@@ -9,9 +9,9 @@ use crate::{Database, FormatParams, OlxClient, OutputFormat, SortOrder, format_r
 use super::daemon::{run_searches_blocking, start_daemon, stop_daemon};
 use super::error::{ApiError, ErrorKind};
 use super::models::{
-    AddSearchRequest, AddSearchResponse, DaemonRequest, DealsRequest, DealsResponse,
-    ListRequest, MessageResponse, RemoveRequest, RunRequest, RunResponse, SearchListResponse,
-    SearchRequest, SearchResponseBody, StatsRequest, StatsResponse, ToggleRequest,
+    AddSearchRequest, AddSearchResponse, DaemonRequest, DealsRequest, DealsResponse, ListRequest,
+    MessageResponse, RemoveRequest, RunRequest, RunResponse, SearchListResponse, SearchRequest,
+    SearchResponseBody, StatsRequest, StatsResponse, ToggleRequest,
 };
 use super::state::AppState;
 

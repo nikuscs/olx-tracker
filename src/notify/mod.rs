@@ -128,10 +128,7 @@ mod tests {
         }
 
         async fn notify_deals(&self, deals: &[Listing], avg_price: Option<f64>) -> Result<()> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("deals({}, {:?})", deals.len(), avg_price));
+            self.calls.lock().unwrap().push(format!("deals({}, {:?})", deals.len(), avg_price));
             Ok(())
         }
     }

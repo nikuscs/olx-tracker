@@ -24,8 +24,8 @@ mod models;
 mod routes;
 mod state;
 
-use std::time::Duration;
 use anyhow::Result as AnyResult;
+use std::time::Duration;
 use tracing::info;
 
 pub use routes::build_app;
@@ -510,7 +510,8 @@ mod tests {
         let app = build_app(state);
 
         // Run with no searches in database (should succeed but return 0 results)
-        let run_body = serde_json::to_vec(&RunRequest { search_id: None, max_results: Some(10) }).unwrap();
+        let run_body =
+            serde_json::to_vec(&RunRequest { search_id: None, max_results: Some(10) }).unwrap();
         let run_response = app
             .oneshot(
                 Request::builder()
@@ -527,7 +528,7 @@ mod tests {
 
         let run_json = run_response.into_body().collect().await.unwrap().to_bytes();
         let run_value: serde_json::Value = serde_json::from_slice(&run_json).unwrap();
-        assert_eq!(run_value.get("total_new").and_then(|v| v.as_u64()), Some(0));
-        assert_eq!(run_value.get("total_deals").and_then(|v| v.as_u64()), Some(0));
+        assert_eq!(run_value.get("total_new").and_then(serde_json::Value::as_u64), Some(0));
+        assert_eq!(run_value.get("total_deals").and_then(serde_json::Value::as_u64), Some(0));
     }
 }

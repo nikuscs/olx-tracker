@@ -339,12 +339,174 @@ impl SearchClient for OlxClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{ApiConfig, AuthConfig, NotificationConfig, OlxCountry, ProxyConfig};
+    use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn make_test_config(base_url: String) -> Config {
+        Config {
+            auth: AuthConfig { bearer_token: Some("test_token".to_string()) },
+            api: ApiConfig {
+                user_agent: "Mozilla/5.0 Test".to_string(),
+                country: OlxCountry::Pt,
+                request_delay_ms: 0,
+                base_url: Some(base_url),
+            },
+            proxy: ProxyConfig { enabled: false, url: None },
+            deals: Default::default(),
+            database: Default::default(),
+            notifications: NotificationConfig::default(),
+        }
+    }
 
     #[test]
     fn test_search_params_default() {
         let params = SearchParams::default();
         assert_eq!(params.offset, 0);
         assert_eq!(params.limit, 50);
+    }
+
+    #[tokio::test]
+    async fn test_olx_client_new() {
+        let config = make_test_config("https://www.olx.pt".to_string());
+        let client = OlxClient::new(&config);
+        assert!(client.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_search_success() {
+        let mock_server = MockServer::start().await;
+
+        let response_body = serde_json::json!({
+            "data": [{
+                "id": 123456789,
+                "title": "Test Listing",
+                "url": "https://www.olx.pt/d/test",
+                "params": []
+            }],
+            "metadata": {
+                "total_elements": 1
+            }
+        });
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response_body))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = make_test_config(mock_server.uri());
+        config.api.base_url = Some(format!("{}/api/v1/offers", mock_server.uri()));
+        let client = OlxClient::new(&config).unwrap();
+
+        let params = SearchParams { query: "test".to_string(), ..Default::default() };
+
+        let result = client.search(&params).await;
+        assert!(result.is_ok());
+        let search_result = result.unwrap();
+        assert_eq!(search_result.data.len(), 1);
+        assert_eq!(search_result.data[0].title, "Test Listing");
+    }
+
+    #[tokio::test]
+    async fn test_lookup_city_success() {
+        let mock_server = MockServer::start().await;
+
+        let response_body = serde_json::json!({
+            "data": [{
+                "id": 123,
+                "city": {
+                    "id": 123,
+                    "name": "Lisboa"
+                },
+                "region": null,
+                "municipality": null
+            }]
+        });
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response_body))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = make_test_config(mock_server.uri());
+        config.api.base_url = Some(format!("{}/api/v1/offers", mock_server.uri()));
+        let client = OlxClient::new(&config).unwrap();
+
+        let result = client.lookup_city("lisboa").await;
+        assert!(result.is_ok());
+        let location = result.unwrap();
+        assert!(location.is_some());
+        assert_eq!(location.unwrap().city.name, "Lisboa");
+    }
+
+    #[tokio::test]
+    async fn test_lookup_city_not_found() {
+        let mock_server = MockServer::start().await;
+
+        let response_body = serde_json::json!({
+            "data": []
+        });
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response_body))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = make_test_config(mock_server.uri());
+        config.api.base_url = Some(format!("{}/api/v1/offers", mock_server.uri()));
+        let client = OlxClient::new(&config).unwrap();
+
+        let result = client.lookup_city("nonexistent").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_search_all_pagination() {
+        let mock_server = MockServer::start().await;
+
+        // Mock response that returns empty data (simulates no results)
+        let response_body = serde_json::json!({
+            "data": [],
+            "metadata": {"total_elements": 0}
+        });
+
+        // Mock accepts any GET request
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response_body))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = make_test_config(mock_server.uri());
+        config.api.base_url = Some(format!("{}/api/v1/offers", mock_server.uri()));
+        let client = OlxClient::new(&config).unwrap();
+
+        let params = SearchParams { query: "test".to_string(), limit: 2, ..Default::default() };
+
+        // search_all should work with no results
+        let result = client.search_all(&params, 10).await;
+        assert!(result.is_ok());
+        let offers = result.unwrap();
+        assert_eq!(offers.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_search_error_handling() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = make_test_config(mock_server.uri());
+        config.api.base_url = Some(format!("{}/api/v1/offers", mock_server.uri()));
+        let client = OlxClient::new(&config).unwrap();
+
+        let params = SearchParams { query: "test".to_string(), ..Default::default() };
+
+        let result = client.search(&params).await;
+        assert!(result.is_err());
     }
 
     #[test]
@@ -388,5 +550,97 @@ mod tests {
         let url = "";
         let masked = mask_proxy_credentials(url);
         assert_eq!(masked, url);
+    }
+
+    #[test]
+    fn test_sort_order_from_str() {
+        assert!(matches!(SortOrder::from_str("newest"), Ok(SortOrder::Newest)));
+        assert!(matches!(SortOrder::from_str("cheapest"), Ok(SortOrder::PriceAsc)));
+        assert!(matches!(SortOrder::from_str("expensive"), Ok(SortOrder::PriceDesc)));
+        assert!(matches!(SortOrder::from_str("relevance"), Ok(SortOrder::Relevance)));
+        assert!(SortOrder::from_str("invalid").is_err());
+    }
+
+    #[test]
+    fn test_sort_order_as_api_param() {
+        assert_eq!(SortOrder::Newest.as_api_param(), "created_at:desc");
+        assert_eq!(SortOrder::PriceAsc.as_api_param(), "filter_float_price:asc");
+        assert_eq!(SortOrder::PriceDesc.as_api_param(), "filter_float_price:desc");
+        assert_eq!(SortOrder::Relevance.as_api_param(), "relevance:desc");
+    }
+
+    #[test]
+    fn test_olx_client_new_with_custom_user_agent() {
+        let mut config = make_test_config("http://test.com".to_string());
+        config.api.user_agent = "CustomBot/1.0".to_string(); // Non-Mozilla user agent
+
+        // Should trigger fake_user_agent generation (line 111)
+        let client = OlxClient::new(&config);
+        assert!(client.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_search_with_city_and_radius() {
+        let mock_server = MockServer::start().await;
+
+        let response_body = serde_json::json!({
+            "data": [{
+                "id": 123,
+                "title": "Test Item",
+                "url": "https://test.com/item",
+                "params": []
+            }],
+            "metadata": {"total_elements": 1}
+        });
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&response_body))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = make_test_config(mock_server.uri());
+        config.api.base_url = Some(format!("{}/api/v1/offers", mock_server.uri()));
+        let client = OlxClient::new(&config).unwrap();
+
+        let params = SearchParams {
+            query: "test".to_string(),
+            city_id: Some(123),     // Cover line 230
+            radius_km: Some(50),    // Cover line 234
+            category_id: Some(456), // Cover line 238
+            ..Default::default()
+        };
+
+        let result = client.search(&params).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_lookup_city_error_handling() {
+        let mock_server = MockServer::start().await;
+
+        // Mock returns 500 error
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = make_test_config(mock_server.uri());
+        config.api.base_url = Some(format!("{}/api/v1/offers", mock_server.uri()));
+        let client = OlxClient::new(&config).unwrap();
+
+        // Should fail with error (covers line 192-194)
+        let result = client.lookup_city("test").await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_request_delay() {
+        let mut config = make_test_config("http://test.com".to_string());
+        config.api.request_delay_ms = 1500;
+        let client = OlxClient::new(&config).unwrap();
+
+        // Test request_delay() method (line 264)
+        let delay = client.request_delay();
+        assert_eq!(delay.as_millis(), 1500);
     }
 }

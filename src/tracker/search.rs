@@ -196,11 +196,18 @@ mod tests {
 
     #[async_trait::async_trait]
     impl SearchClient for MockClient {
-        async fn lookup_city(&self, _city_name: &str) -> Result<Option<crate::api::models::LocationResult>> {
+        async fn lookup_city(
+            &self,
+            _city_name: &str,
+        ) -> Result<Option<crate::api::models::LocationResult>> {
             Ok(None) // Simple mock - no city lookup
         }
 
-        async fn search_all(&self, _params: &SearchParams, _max_results: i32) -> Result<Vec<OfferData>> {
+        async fn search_all(
+            &self,
+            _params: &SearchParams,
+            _max_results: i32,
+        ) -> Result<Vec<OfferData>> {
             Ok(self.offers.clone())
         }
 
@@ -234,7 +241,8 @@ mod tests {
     #[tokio::test]
     async fn test_run_search_new_listings() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
 
         let offers = vec![
             create_test_offer(1, "iPhone 12", Some(400.0)),
@@ -255,10 +263,12 @@ mod tests {
     #[tokio::test]
     async fn test_run_search_updated_listings() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
 
         // Insert initial listing
-        db.upsert_listing(1, search_id, "iPhone 12", Some(400.0), "EUR", "url", None, None, None).unwrap();
+        db.upsert_listing(1, search_id, "iPhone 12", Some(400.0), "EUR", "url", None, None, None)
+            .unwrap();
 
         let offers = vec![create_test_offer(1, "iPhone 12 Pro", Some(400.0))];
         let client = MockClient::new(offers);
@@ -274,10 +284,12 @@ mod tests {
     #[tokio::test]
     async fn test_run_search_price_drop() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
 
         // Insert initial listing with high price
-        db.upsert_listing(1, search_id, "iPhone 12", Some(500.0), "EUR", "url", None, None, None).unwrap();
+        db.upsert_listing(1, search_id, "iPhone 12", Some(500.0), "EUR", "url", None, None, None)
+            .unwrap();
 
         // Return same listing with lower price
         let offers = vec![create_test_offer(1, "iPhone 12", Some(400.0))];
@@ -295,11 +307,15 @@ mod tests {
     #[tokio::test]
     async fn test_run_search_deal_detection() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "iphone", None, Some(300.0), None, None, None, None, None).unwrap();
+        let search_id = db
+            .create_search("Test", "iphone", None, Some(300.0), None, None, None, None, None)
+            .unwrap();
 
         // Insert some listings to establish price stats
-        db.upsert_listing(10, search_id, "iPhone X", Some(500.0), "EUR", "url1", None, None, None).unwrap();
-        db.upsert_listing(11, search_id, "iPhone 11", Some(600.0), "EUR", "url2", None, None, None).unwrap();
+        db.upsert_listing(10, search_id, "iPhone X", Some(500.0), "EUR", "url1", None, None, None)
+            .unwrap();
+        db.upsert_listing(11, search_id, "iPhone 11", Some(600.0), "EUR", "url2", None, None, None)
+            .unwrap();
         db.update_search_stats(search_id).unwrap();
 
         // Now add a deal (below max_price)
@@ -318,7 +334,9 @@ mod tests {
     #[tokio::test]
     async fn test_run_search_empty_results() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "nonexistent", None, None, None, None, None, None, None).unwrap();
+        let search_id = db
+            .create_search("Test", "nonexistent", None, None, None, None, None, None, None)
+            .unwrap();
 
         let client = MockClient::new(vec![]); // No offers
         let tracker = SearchTracker::new(&db, &client, DealConfig::default());
@@ -336,8 +354,12 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
 
         // Create multiple searches
-        let _id1 = db.create_search("Search 1", "laptop", None, None, None, None, None, None, None).unwrap();
-        let _id2 = db.create_search("Search 2", "phone", None, None, None, None, None, None, None).unwrap();
+        let _id1 = db
+            .create_search("Search 1", "laptop", None, None, None, None, None, None, None)
+            .unwrap();
+        let _id2 = db
+            .create_search("Search 2", "phone", None, None, None, None, None, None, None)
+            .unwrap();
 
         let offers = vec![create_test_offer(1, "Laptop", Some(800.0))];
         let client = MockClient::new(offers);
@@ -351,11 +373,13 @@ mod tests {
     #[tokio::test]
     async fn test_run_search_with_price_filters() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "phone", Some(100.0), Some(200.0), None, None, None, None, None).unwrap();
+        let search_id = db
+            .create_search("Test", "phone", Some(100.0), Some(200.0), None, None, None, None, None)
+            .unwrap();
 
         let offers = vec![
-            create_test_offer(1, "Cheap phone", Some(50.0)),   // Below min
-            create_test_offer(2, "Good phone", Some(150.0)),   // In range
+            create_test_offer(1, "Cheap phone", Some(50.0)), // Below min
+            create_test_offer(2, "Good phone", Some(150.0)), // In range
             create_test_offer(3, "Expensive phone", Some(500.0)), // Above max
         ];
 

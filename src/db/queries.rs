@@ -171,9 +171,7 @@ impl Database {
         };
 
         let mut stmt = self.conn.prepare(sql)?;
-        let searches = stmt
-            .query_map([], Self::map_search_row)?
-            .collect::<Result<Vec<_>, _>>()?;
+        let searches = stmt.query_map([], Self::map_search_row)?.collect::<Result<Vec<_>, _>>()?;
 
         Ok(searches)
     }
@@ -284,11 +282,9 @@ impl Database {
         let mut stmt = self.conn.prepare(sql)?;
 
         let listings = if let Some(sid) = search_id {
-            stmt.query_map(params![sid], Self::map_listing_row)?
-                .collect::<Result<Vec<_>, _>>()?
+            stmt.query_map(params![sid], Self::map_listing_row)?.collect::<Result<Vec<_>, _>>()?
         } else {
-            stmt.query_map([], Self::map_listing_row)?
-                .collect::<Result<Vec<_>, _>>()?
+            stmt.query_map([], Self::map_listing_row)?.collect::<Result<Vec<_>, _>>()?
         };
 
         Ok(listings)
@@ -486,7 +482,8 @@ mod tests {
     #[test]
     fn test_set_search_active() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
 
         // Should be active by default
         let search = db.get_search(search_id).unwrap().unwrap();
@@ -507,8 +504,11 @@ mod tests {
     fn test_list_searches_active_only() {
         let db = Database::open_in_memory().unwrap();
 
-        let active_id = db.create_search("Active", "test1", None, None, None, None, None, None, None).unwrap();
-        let inactive_id = db.create_search("Inactive", "test2", None, None, None, None, None, None, None).unwrap();
+        let active_id =
+            db.create_search("Active", "test1", None, None, None, None, None, None, None).unwrap();
+        let inactive_id = db
+            .create_search("Inactive", "test2", None, None, None, None, None, None, None)
+            .unwrap();
 
         db.set_search_active(inactive_id, false).unwrap();
 
@@ -525,10 +525,13 @@ mod tests {
     #[test]
     fn test_get_deals() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
 
-        db.upsert_listing(1, search_id, "Normal", Some(100.0), "EUR", "url1", None, None, None).unwrap();
-        db.upsert_listing(2, search_id, "Deal", Some(50.0), "EUR", "url2", None, None, None).unwrap();
+        db.upsert_listing(1, search_id, "Normal", Some(100.0), "EUR", "url1", None, None, None)
+            .unwrap();
+        db.upsert_listing(2, search_id, "Deal", Some(50.0), "EUR", "url2", None, None, None)
+            .unwrap();
 
         // Mark one as a deal
         db.mark_as_deal(2, true).unwrap();
@@ -546,7 +549,8 @@ mod tests {
     #[test]
     fn test_get_search_stats() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
 
         // No stats initially
         let stats = db.get_search_stats(search_id).unwrap();
@@ -566,7 +570,8 @@ mod tests {
     #[test]
     fn test_listing_with_images_and_region() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
 
         db.upsert_listing(
             1,
@@ -590,7 +595,8 @@ mod tests {
     #[test]
     fn test_listing_without_price() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
 
         db.upsert_listing(1, search_id, "Free Item", None, "EUR", "url", None, None, None).unwrap();
 
@@ -605,16 +611,20 @@ mod tests {
     #[test]
     fn test_price_history_tracks_changes() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
 
         // Initial price
-        db.upsert_listing(1, search_id, "Item", Some(100.0), "EUR", "url", None, None, None).unwrap();
+        db.upsert_listing(1, search_id, "Item", Some(100.0), "EUR", "url", None, None, None)
+            .unwrap();
 
         // Price drop
-        db.upsert_listing(1, search_id, "Item", Some(80.0), "EUR", "url", None, None, None).unwrap();
+        db.upsert_listing(1, search_id, "Item", Some(80.0), "EUR", "url", None, None, None)
+            .unwrap();
 
         // Price increase
-        db.upsert_listing(1, search_id, "Item", Some(90.0), "EUR", "url", None, None, None).unwrap();
+        db.upsert_listing(1, search_id, "Item", Some(90.0), "EUR", "url", None, None, None)
+            .unwrap();
 
         let history = db.get_price_history(1).unwrap();
         assert_eq!(history.len(), 3);
@@ -677,7 +687,8 @@ mod tests {
     #[test]
     fn test_stats_with_mixed_prices() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
 
         // Mix of priced and free items
         db.upsert_listing(1, search_id, "A", Some(100.0), "EUR", "url1", None, None, None).unwrap();
@@ -693,11 +704,15 @@ mod tests {
     #[test]
     fn test_mark_multiple_deals() {
         let db = Database::open_in_memory().unwrap();
-        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
 
-        db.upsert_listing(1, search_id, "Deal1", Some(50.0), "EUR", "url1", None, None, None).unwrap();
-        db.upsert_listing(2, search_id, "Deal2", Some(60.0), "EUR", "url2", None, None, None).unwrap();
-        db.upsert_listing(3, search_id, "Normal", Some(100.0), "EUR", "url3", None, None, None).unwrap();
+        db.upsert_listing(1, search_id, "Deal1", Some(50.0), "EUR", "url1", None, None, None)
+            .unwrap();
+        db.upsert_listing(2, search_id, "Deal2", Some(60.0), "EUR", "url2", None, None, None)
+            .unwrap();
+        db.upsert_listing(3, search_id, "Normal", Some(100.0), "EUR", "url3", None, None, None)
+            .unwrap();
 
         db.mark_as_deal(1, true).unwrap();
         db.mark_as_deal(2, true).unwrap();
