@@ -7,6 +7,26 @@ pub struct SearchResponse {
     pub metadata: SearchMetadata,
 }
 
+/// Response from location autocomplete API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocationResponse {
+    pub data: Vec<LocationResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocationResult {
+    pub city: LocationCity,
+    #[serde(default)]
+    pub municipality: Option<LocationMunicipality>,
+    #[serde(default)]
+    pub region: Option<LocationRegion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocationMunicipality {
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SearchMetadata {
     #[serde(default)]
@@ -27,9 +47,22 @@ pub struct OfferData {
     #[serde(default)]
     pub user: Option<OfferUser>,
     #[serde(default)]
+    pub photos: Vec<OfferPhoto>,
+    #[serde(default)]
     pub created_time: Option<String>,
     #[serde(default)]
     pub last_refresh_time: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OfferPhoto {
+    pub id: i64,
+    pub filename: String,
+    pub link: String,
+    #[serde(default)]
+    pub width: Option<i32>,
+    #[serde(default)]
+    pub height: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +79,8 @@ pub enum ParamValue {
     Simple(String),
     Labeled { value: Option<String>, label: String },
     Numeric { value: f64, label: Option<String> },
+    // Catch-all for complex objects we don't need to parse
+    Other(serde_json::Value),
 }
 
 impl OfferParam {
@@ -54,7 +89,7 @@ impl OfferParam {
             Some(ParamValue::Simple(s)) => Some(s.clone()),
             Some(ParamValue::Labeled { label, .. }) => Some(label.clone()),
             Some(ParamValue::Numeric { value, .. }) => Some(value.to_string()),
-            None => None,
+            Some(ParamValue::Other(_)) | None => None,
         }
     }
 
@@ -63,7 +98,7 @@ impl OfferParam {
             Some(ParamValue::Numeric { value, .. }) => Some(*value),
             Some(ParamValue::Simple(s)) => s.parse().ok(),
             Some(ParamValue::Labeled { value, .. }) => value.as_ref().and_then(|v| v.parse().ok()),
-            None => None,
+            Some(ParamValue::Other(_)) | None => None,
         }
     }
 }
@@ -80,6 +115,8 @@ pub struct OfferLocation {
 pub struct LocationCity {
     pub id: Option<i64>,
     pub name: String,
+    #[serde(default)]
+    pub normalized_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +129,18 @@ pub struct LocationRegion {
 pub struct OfferUser {
     pub id: Option<i64>,
     pub name: Option<String>,
+}
+
+impl OfferPhoto {
+    /// Get thumbnail URL (400x300 by default)
+    pub fn thumbnail_url(&self) -> String {
+        self.link.replace("{width}x{height}", "400x300")
+    }
+
+    /// Get full size URL (1200x900)
+    pub fn full_url(&self) -> String {
+        self.link.replace("{width}x{height}", "1200x900")
+    }
 }
 
 impl OfferData {
@@ -109,6 +158,16 @@ impl OfferData {
 
     pub fn get_seller_name(&self) -> Option<String> {
         self.user.as_ref().and_then(|u| u.name.clone())
+    }
+
+    /// Get the main image thumbnail URL
+    pub fn get_thumbnail(&self) -> Option<String> {
+        self.photos.first().map(OfferPhoto::thumbnail_url)
+    }
+
+    /// Get all image thumbnail URLs
+    pub fn get_all_thumbnails(&self) -> Vec<String> {
+        self.photos.iter().map(OfferPhoto::thumbnail_url).collect()
     }
 }
 

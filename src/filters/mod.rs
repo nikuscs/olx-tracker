@@ -94,6 +94,7 @@ mod tests {
             params: vec![],
             location: None,
             user: None,
+            photos: vec![],
             created_time: None,
             last_refresh_time: None,
         }

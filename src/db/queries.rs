@@ -61,19 +61,19 @@ pub struct Database {
 
 impl Database {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let conn = Connection::open(path.as_ref())
+        let mut conn = Connection::open(path.as_ref())
             .with_context(|| format!("Failed to open database: {:?}", path.as_ref()))?;
 
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-        run_migrations(&conn)?;
+        run_migrations(&mut conn)?;
 
         Ok(Self { conn })
     }
 
     pub fn open_in_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory()?;
+        let mut conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-        run_migrations(&conn)?;
+        run_migrations(&mut conn)?;
         Ok(Self { conn })
     }
 

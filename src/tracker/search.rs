@@ -42,9 +42,19 @@ impl<'a> SearchTracker<'a> {
 
         let sort = search.sort_order.parse().unwrap_or_default();
 
+        // Lookup city ID if city name is set
+        let city_id = if let Some(ref city_name) = search.city {
+            match self.client.lookup_city(city_name).await? {
+                Some(loc) => loc.city.id,
+                None => None,
+            }
+        } else {
+            None
+        };
+
         let params = SearchParams {
             query: search.keyword.clone(),
-            city: search.city.clone(),
+            city_id,
             radius_km: search.radius_km,
             category_id: search.category_id,
             sort,

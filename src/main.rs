@@ -9,7 +9,8 @@ use tracing_subscriber::EnvFilter;
 
 use olx_tracker::api::SearchParams;
 use olx_tracker::{
-    Config, Database, FilterChain, MultiNotifier, Notifier, OlxClient, SearchTracker, SortOrder,
+    format_results, Config, Database, FilterChain, MultiNotifier, Notifier, OlxClient,
+    OutputFormat, SearchTracker, SortOrder,
 };
 
 #[derive(Parser)]
@@ -74,11 +75,11 @@ enum Commands {
     /// Add a new search to track
     Add {
         /// Name for this search (e.g., "PS2 cheap")
-        #[arg(short, long)]
+        #[arg(long)]
         name: String,
 
         /// Search keyword (e.g., "playstation 2")
-        #[arg(short, long)]
+        #[arg(long)]
         keyword: String,
 
         /// Minimum price filter (ignore cheaper junk results)
@@ -86,7 +87,7 @@ enum Commands {
         min_price: Option<f64>,
 
         /// Maximum price threshold for deals (per-search)
-        #[arg(short = 'p', long)]
+        #[arg(long)]
         max_price: Option<f64>,
 
         /// City to search in
@@ -94,7 +95,7 @@ enum Commands {
         city: Option<String>,
 
         /// Search radius in km (requires city)
-        #[arg(short, long)]
+        #[arg(long)]
         radius: Option<i32>,
 
         /// OLX category ID
@@ -102,7 +103,7 @@ enum Commands {
         category: Option<i64>,
 
         /// Sort order: newest, cheapest, expensive, relevance
-        #[arg(short, long, default_value = "newest")]
+        #[arg(long, default_value = "newest")]
         sort: String,
 
         /// Expire search after N days (stops scanning, keeps data)
@@ -120,50 +121,50 @@ enum Commands {
     /// Run a check on searches
     Run {
         /// Run only a specific search by ID
-        #[arg(short, long)]
+        #[arg(long)]
         search_id: Option<i64>,
 
         /// Maximum results per search
-        #[arg(short, long, default_value = "100")]
+        #[arg(long, default_value = "100")]
         max_results: i32,
     },
 
     /// Start daemon mode (checks periodically)
     Daemon {
         /// Check interval in minutes
-        #[arg(short, long, default_value = "30")]
+        #[arg(long, default_value = "30")]
         interval: u64,
 
         /// Maximum results per search
-        #[arg(short, long, default_value = "100")]
+        #[arg(long, default_value = "100")]
         max_results: i32,
     },
 
     /// Show deals (listings below average price or target price)
     Deals {
         /// Filter by search ID
-        #[arg(short, long)]
+        #[arg(long)]
         search_id: Option<i64>,
     },
 
     /// Show price statistics for a search
     Stats {
         /// Search ID to show stats for
-        #[arg(short, long)]
+        #[arg(long)]
         search_id: i64,
     },
 
     /// Remove a search
     Remove {
         /// Search ID to remove
-        #[arg(short, long)]
+        #[arg(long)]
         search_id: i64,
     },
 
     /// Toggle search active status
     Toggle {
         /// Search ID to toggle
-        #[arg(short, long)]
+        #[arg(long)]
         search_id: i64,
     },
 
@@ -173,11 +174,11 @@ enum Commands {
         query: String,
 
         /// Maximum results to show
-        #[arg(short, long, default_value = "20")]
+        #[arg(long, default_value = "20")]
         max: i32,
 
         /// Sort order: newest, cheapest, expensive, relevance
-        #[arg(short, long, default_value = "relevance")]
+        #[arg(long, default_value = "relevance")]
         sort: String,
 
         /// Minimum price filter (ignore cheaper junk)
@@ -193,8 +194,12 @@ enum Commands {
         city: Option<String>,
 
         /// Search radius in km (requires city)
-        #[arg(short, long)]
+        #[arg(long)]
         radius: Option<i32>,
+
+        /// Output format: table, json, markdown (or md/llm)
+        #[arg(long, default_value = "table")]
+        format: String,
     },
 }
 
@@ -286,8 +291,8 @@ async fn main() -> Result<()> {
         Commands::Toggle { search_id } => {
             cmd_toggle(&db, search_id)?;
         }
-        Commands::Search { query, max, sort, min_price, max_price, city, radius } => {
-            cmd_search(&config, &query, max, &sort, min_price, max_price, city, radius).await?;
+        Commands::Search { query, max, sort, min_price, max_price, city, radius, format } => {
+            cmd_search(&config, &query, max, &sort, min_price, max_price, city, radius, &format).await?;
         }
     }
 
@@ -538,14 +543,32 @@ async fn cmd_search(
     max_price: Option<f64>,
     city: Option<String>,
     radius: Option<i32>,
+    format: &str,
 ) -> Result<()> {
     let sort_order: SortOrder = sort.parse().map_err(|e: String| anyhow::anyhow!("{e}"))?;
+    let output_format: OutputFormat = format.parse().map_err(|e: String| anyhow::anyhow!("{e}"))?;
 
     let client = OlxClient::new(config)?;
 
+    // Lookup city ID if city name provided
+    let city_id = if let Some(ref city_name) = city {
+        let location = client.lookup_city(city_name).await?;
+        match location {
+            Some(loc) => {
+                info!("Found city: {} (ID: {})", loc.city.name, loc.city.id.unwrap_or(0));
+                loc.city.id
+            }
+            None => {
+                anyhow::bail!("City not found: {city_name}");
+            }
+        }
+    } else {
+        None
+    };
+
     let params = SearchParams {
         query: query.to_string(),
-        city,
+        city_id,
         radius_km: radius,
         category_id: None,
         sort: sort_order,
@@ -576,7 +599,8 @@ async fn cmd_search(
     if offers.is_empty() {
         println!("No results found for '{query}'");
         if min_price.is_some() || max_price.is_some() {
-            println!("(price filter: {} - {})",
+            println!(
+                "(price filter: {} - {})",
                 min_price.map_or("any".to_string(), |p| format!("{p:.0}€")),
                 max_price.map_or("any".to_string(), |p| format!("{p:.0}€"))
             );
@@ -584,60 +608,28 @@ async fn cmd_search(
         return Ok(());
     }
 
-    let filter_info = match (min_price, max_price) {
-        (Some(min), Some(max)) => format!(" [price: {min:.0}€ - {max:.0}€]"),
-        (Some(min), None) => format!(" [min: {min:.0}€]"),
-        (None, Some(max)) => format!(" [max: {max:.0}€]"),
-        (None, None) => String::new(),
-    };
-
-    println!(
-        "Found {} result(s) for '{}' (sorted by {}{}):\n",
-        offers.len(),
+    let output = format_results(
+        output_format,
         query,
         sort,
-        filter_info
+        &offers,
+        min_price,
+        max_price,
+        city,
+        radius,
     );
 
-    println!(
-        "{:<10} {:<45} {:<12} {:<20}",
-        "ID", "Title", "Price", "Location"
-    );
-    println!("{}", "-".repeat(90));
-
-    for offer in &offers {
-        let price = offer
-            .get_price()
-            .map_or_else(|| "-".to_string(), |p| format!("{p:.2} €"));
-        let city = offer.get_city().unwrap_or_else(|| "-".to_string());
-        let region = offer.get_region();
-        let location = match region {
-            Some(r) => format!("{}, {}", city, r),
-            None => city,
-        };
-
-        println!(
-            "{:<10} {:<45} {:<12} {:<20}",
-            offer.id,
-            truncate(&offer.title, 43),
-            price,
-            truncate(&location, 18)
-        );
-    }
-
-    println!("\nURLs:");
-    for offer in &offers {
-        println!("  {} - {}", offer.id, offer.url);
-    }
+    print!("{output}");
 
     Ok(())
 }
 
 fn truncate(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
+    if s.chars().count() <= max_len {
         s.to_string()
     } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
+        let truncated: String = s.chars().take(max_len.saturating_sub(3)).collect();
+        format!("{truncated}...")
     }
 }
 
