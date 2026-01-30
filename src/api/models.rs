@@ -224,4 +224,227 @@ mod tests {
         assert_eq!(offer.get_city(), Some("Porto".to_string()));
         assert_eq!(offer.get_seller_name(), Some("João".to_string()));
     }
+
+    #[test]
+    fn test_offer_photo_urls() {
+        let photo = OfferPhoto {
+            id: 1,
+            filename: "test.jpg".to_string(),
+            link: "https://example.com/img/{width}x{height}/test.jpg".to_string(),
+            width: Some(800),
+            height: Some(600),
+        };
+
+        assert_eq!(photo.thumbnail_url(), "https://example.com/img/400x300/test.jpg");
+        assert_eq!(photo.full_url(), "https://example.com/img/1200x900/test.jpg");
+    }
+
+    #[test]
+    fn test_offer_get_region() {
+        let offer = OfferData {
+            id: 1,
+            title: "Test".to_string(),
+            url: "url".to_string(),
+            params: vec![],
+            location: Some(OfferLocation {
+                city: None,
+                region: Some(LocationRegion {
+                    id: Some(10),
+                    name: "Norte".to_string(),
+                }),
+            }),
+            user: None,
+            photos: vec![],
+            created_time: None,
+            last_refresh_time: None,
+        };
+
+        assert_eq!(offer.get_region(), Some("Norte".to_string()));
+    }
+
+    #[test]
+    fn test_offer_get_thumbnails() {
+        let offer = OfferData {
+            id: 1,
+            title: "Test".to_string(),
+            url: "url".to_string(),
+            params: vec![],
+            location: None,
+            user: None,
+            photos: vec![
+                OfferPhoto {
+                    id: 1,
+                    filename: "1.jpg".to_string(),
+                    link: "https://example.com/{width}x{height}/1.jpg".to_string(),
+                    width: None,
+                    height: None,
+                },
+                OfferPhoto {
+                    id: 2,
+                    filename: "2.jpg".to_string(),
+                    link: "https://example.com/{width}x{height}/2.jpg".to_string(),
+                    width: None,
+                    height: None,
+                },
+            ],
+            created_time: None,
+            last_refresh_time: None,
+        };
+
+        assert_eq!(offer.get_thumbnail(), Some("https://example.com/400x300/1.jpg".to_string()));
+        assert_eq!(offer.get_all_thumbnails().len(), 2);
+        assert_eq!(offer.get_all_thumbnails()[0], "https://example.com/400x300/1.jpg");
+        assert_eq!(offer.get_all_thumbnails()[1], "https://example.com/400x300/2.jpg");
+    }
+
+    #[test]
+    fn test_offer_no_photos() {
+        let offer = OfferData {
+            id: 1,
+            title: "Test".to_string(),
+            url: "url".to_string(),
+            params: vec![],
+            location: None,
+            user: None,
+            photos: vec![],
+            created_time: None,
+            last_refresh_time: None,
+        };
+
+        assert_eq!(offer.get_thumbnail(), None);
+        assert!(offer.get_all_thumbnails().is_empty());
+    }
+
+    #[test]
+    fn test_param_value_simple() {
+        let param = OfferParam {
+            key: "condition".to_string(),
+            name: "Condition".to_string(),
+            value: Some(ParamValue::Simple("Used".to_string())),
+        };
+
+        assert_eq!(param.get_value(), Some("Used".to_string()));
+        assert_eq!(param.get_numeric_value(), None);
+    }
+
+    #[test]
+    fn test_param_value_labeled() {
+        let param = OfferParam {
+            key: "fuel".to_string(),
+            name: "Fuel".to_string(),
+            value: Some(ParamValue::Labeled {
+                value: Some("diesel".to_string()),
+                label: "Diesel".to_string(),
+            }),
+        };
+
+        assert_eq!(param.get_value(), Some("Diesel".to_string()));
+        assert_eq!(param.get_numeric_value(), None);
+    }
+
+    #[test]
+    fn test_param_value_numeric_string_conversion() {
+        let param = OfferParam {
+            key: "year".to_string(),
+            name: "Year".to_string(),
+            value: Some(ParamValue::Simple("2020".to_string())),
+        };
+
+        assert_eq!(param.get_numeric_value(), Some(2020.0));
+    }
+
+    #[test]
+    fn test_param_value_other() {
+        let param = OfferParam {
+            key: "complex".to_string(),
+            name: "Complex".to_string(),
+            value: Some(ParamValue::Other(serde_json::json!({"nested": "data"}))),
+        };
+
+        assert_eq!(param.get_value(), None);
+        assert_eq!(param.get_numeric_value(), None);
+    }
+
+    #[test]
+    fn test_param_value_none() {
+        let param = OfferParam {
+            key: "empty".to_string(),
+            name: "Empty".to_string(),
+            value: None,
+        };
+
+        assert_eq!(param.get_value(), None);
+        assert_eq!(param.get_numeric_value(), None);
+    }
+
+    #[test]
+    fn test_offer_no_location() {
+        let offer = OfferData {
+            id: 1,
+            title: "Test".to_string(),
+            url: "url".to_string(),
+            params: vec![],
+            location: None,
+            user: None,
+            photos: vec![],
+            created_time: None,
+            last_refresh_time: None,
+        };
+
+        assert_eq!(offer.get_city(), None);
+        assert_eq!(offer.get_region(), None);
+    }
+
+    #[test]
+    fn test_offer_no_user() {
+        let offer = OfferData {
+            id: 1,
+            title: "Test".to_string(),
+            url: "url".to_string(),
+            params: vec![],
+            location: None,
+            user: None,
+            photos: vec![],
+            created_time: None,
+            last_refresh_time: None,
+        };
+
+        assert_eq!(offer.get_seller_name(), None);
+    }
+
+    #[test]
+    fn test_location_response_parsing() {
+        let json = r#"{
+            "data": [
+                {
+                    "city": {
+                        "id": 1,
+                        "name": "Porto",
+                        "normalized_name": "porto"
+                    },
+                    "region": {
+                        "id": 10,
+                        "name": "Norte"
+                    },
+                    "municipality": {
+                        "name": "Porto Municipality"
+                    }
+                }
+            ]
+        }"#;
+
+        let response: LocationResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.data.len(), 1);
+        assert_eq!(response.data[0].city.name, "Porto");
+        assert_eq!(response.data[0].region.as_ref().unwrap().name, "Norte");
+        assert_eq!(response.data[0].municipality.as_ref().unwrap().name, "Porto Municipality");
+    }
+
+    #[test]
+    fn test_search_metadata_defaults() {
+        let json = r#"{"data": []}"#;
+        let response: SearchResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.metadata.total_elements, None);
+        assert_eq!(response.metadata.visible_total_count, None);
+    }
 }

@@ -275,4 +275,142 @@ mod tests {
         assert!(config.auth.bearer_token.is_none());
         assert_eq!(config.deals.threshold_pct, 20.0);
     }
+
+    #[test]
+    fn test_validation_proxy_enabled_without_url() {
+        let toml = r#"
+            [proxy]
+            enabled = true
+        "#;
+
+        let config: Config = toml::from_str(toml).unwrap();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Proxy URL is required"));
+    }
+
+    #[test]
+    fn test_validation_negative_deal_threshold() {
+        let toml = r#"
+            [deals]
+            threshold_pct = -10.0
+        "#;
+
+        let config: Config = toml::from_str(toml).unwrap();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("between 0 and 100"));
+    }
+
+    #[test]
+    fn test_validation_deal_threshold_above_100() {
+        let toml = r#"
+            [deals]
+            threshold_pct = 150.0
+        "#;
+
+        let config: Config = toml::from_str(toml).unwrap();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("between 0 and 100"));
+    }
+
+    #[test]
+    fn test_get_base_url_uses_country_default() {
+        let config = ApiConfig { country: OlxCountry::Pt, base_url: None, ..Default::default() };
+        assert_eq!(config.get_base_url(), "https://www.olx.pt/api/v1/offers");
+    }
+
+    #[test]
+    fn test_get_base_url_uses_custom_override() {
+        let config = ApiConfig {
+            country: OlxCountry::Pt,
+            base_url: Some("https://custom.api.example.com".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(config.get_base_url(), "https://custom.api.example.com");
+    }
+
+    #[test]
+    fn test_minimal_config() {
+        let config = Config::minimal();
+        assert!(config.auth.bearer_token.is_none());
+        assert!(!config.proxy.enabled);
+        assert_eq!(config.deals.threshold_pct, 20.0);
+    }
+
+    #[test]
+    fn test_load_or_default_with_nonexistent_file() {
+        let config = Config::load_or_default("nonexistent.toml");
+        assert_eq!(config.deals.threshold_pct, 20.0); // Should return default
+    }
+
+    #[test]
+    fn test_proxy_config_default() {
+        let proxy = ProxyConfig::default();
+        assert!(!proxy.enabled);
+        assert!(proxy.url.is_none());
+    }
+
+    #[test]
+    fn test_notification_config_all_fields() {
+        let toml = r#"
+            [notifications]
+            webhook_url = "https://webhook.example.com"
+            discord_webhook_url = "https://discord.example.com"
+            notify_on_new_listing = true
+            notify_on_price_drop = true
+            notify_on_deal = true
+        "#;
+
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.notifications.webhook_url, Some("https://webhook.example.com".to_string()));
+        assert_eq!(config.notifications.discord_webhook_url, Some("https://discord.example.com".to_string()));
+        assert!(config.notifications.notify_on_new_listing);
+        assert!(config.notifications.notify_on_price_drop);
+        assert!(config.notifications.notify_on_deal);
+    }
+
+    #[test]
+    fn test_notification_config_defaults() {
+        let config = NotificationConfig::default();
+        assert!(config.webhook_url.is_none());
+        assert!(config.discord_webhook_url.is_none());
+        assert!(!config.notify_on_new_listing);
+        assert!(!config.notify_on_price_drop);
+        assert!(!config.notify_on_deal);
+    }
+
+    #[test]
+    fn test_database_config_default() {
+        let config = DatabaseConfig::default();
+        assert_eq!(config.path, "olx_tracker.db");
+    }
+
+    #[test]
+    fn test_deal_config_default() {
+        let config = DealConfig::default();
+        assert_eq!(config.threshold_pct, 20.0);
+        assert!(config.target_price.is_none());
+    }
+
+    #[test]
+    fn test_api_config_default() {
+        let config = ApiConfig::default();
+        assert_eq!(config.country, OlxCountry::Pt);
+        assert!(config.base_url.is_none());
+        assert_eq!(config.request_delay_ms, 1000);
+        assert!(config.user_agent.contains("Mozilla"));
+    }
+
+    #[test]
+    fn test_all_countries() {
+        assert_eq!(OlxCountry::Pt.api_base_url(), "https://www.olx.pt/api/v1/offers");
+        assert_eq!(OlxCountry::Pl.api_base_url(), "https://www.olx.pl/api/v1/offers");
+        assert_eq!(OlxCountry::Ro.api_base_url(), "https://www.olx.ro/api/v1/offers");
+        assert_eq!(OlxCountry::Bg.api_base_url(), "https://www.olx.bg/api/v1/offers");
+        assert_eq!(OlxCountry::Ua.api_base_url(), "https://www.olx.ua/api/v1/offers");
+        assert_eq!(OlxCountry::Kz.api_base_url(), "https://www.olx.kz/api/v1/offers");
+        assert_eq!(OlxCountry::Uz.api_base_url(), "https://www.olx.uz/api/v1/offers");
+    }
 }

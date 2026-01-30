@@ -73,6 +73,47 @@ olx-tracker daemon --interval 60 --max-results 100
 | `--max-results` | Max results per search (default: 100) |
 | `--interval` | Check interval in minutes (default: 30) |
 
+## Serve (HTTP API)
+
+```bash
+olx-tracker serve
+olx-tracker serve --host 0.0.0.0 --port 8080
+olx-tracker serve --timeout 120
+API_KEY=secret olx-tracker serve
+```
+
+| Flag | Description |
+|------|-------------|
+| `--host` | Bind address (default: 127.0.0.1) |
+| `--port` | Port to listen on (default: 8080) |
+| `--timeout` | Request timeout in seconds (default: 60) |
+| `--api-key` | API key for authentication (or use `API_KEY` env) |
+
+Endpoints (JSON):
+
+- `GET /health` - Health check (no auth required)
+- `POST /search` - Quick search
+- `POST /searches/add` - Add a tracked search
+- `POST /searches/list` - List tracked searches
+- `POST /searches/run` - Run searches
+- `POST /searches/daemon` - Start background daemon
+- `POST /searches/daemon/stop` - Stop background daemon
+- `POST /searches/deals` - Get deals
+- `POST /searches/stats` - Get search statistics
+- `POST /searches/toggle` - Toggle search active status
+- `POST /searches/remove` - Remove a search
+
+Auth: set `API_KEY` for the `serve` command and pass it via `x-api-key`, `api-key`, or `Authorization: Bearer ...` header.
+
+### Security Notes
+
+When deploying the HTTP API:
+
+- **Use HTTPS in production** - Deploy behind a reverse proxy (nginx, caddy) with TLS
+- **Set a strong API key** - Always use `API_KEY` when exposing to networks
+- **Rate limiting** - Consider rate limiting at the reverse proxy level
+- Request body size is limited to 1MB by default
+
 ## Countries
 
 ```bash

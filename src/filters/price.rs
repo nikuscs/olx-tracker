@@ -12,15 +12,14 @@ impl Filter for PriceFilter {
 
         match (price, search.min_price, search.max_price) {
             // No price on listing - keep it (let user decide)
-            (None, _, _) => true,
             // Both min and max set
             (Some(p), Some(min), Some(max)) => p >= min && p <= max,
             // Only min set
             (Some(p), Some(min), None) => p >= min,
             // Only max set
             (Some(p), None, Some(max)) => p <= max,
-            // No price filters
-            (Some(_), None, None) => true,
+            // No price filters or no price
+            (None, _, _) | (Some(_), None, None) => true,
         }
     }
 
@@ -35,15 +34,13 @@ mod tests {
     use crate::api::{OfferParam, ParamValue};
 
     fn make_offer(price: Option<f64>) -> OfferData {
-        let params = if let Some(p) = price {
+        let params = price.map_or_else(Vec::new, |p| {
             vec![OfferParam {
                 key: "price".to_string(),
                 name: "Price".to_string(),
                 value: Some(ParamValue::Numeric { value: p, label: None }),
             }]
-        } else {
-            vec![]
-        };
+        });
 
         OfferData {
             id: 1,

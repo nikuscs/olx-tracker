@@ -15,9 +15,19 @@ OLX Price Tracker - A Rust CLI tool for tracking OLX.pt listings and alerting on
 
 ```
 src/
-├── main.rs          # CLI entry point
+├── main.rs          # CLI entry point (~335 lines)
 ├── lib.rs           # Library exports
 ├── config.rs        # TOML config parsing
+├── commands/        # CLI command handlers
+│   ├── mod.rs       # Exports
+│   ├── add.rs       # Add search command
+│   ├── list.rs      # List searches command
+│   ├── run.rs       # Run & daemon commands
+│   ├── deals.rs     # Show deals command
+│   ├── stats.rs     # Show stats command
+│   ├── remove.rs    # Remove search command
+│   ├── toggle.rs    # Toggle search command
+│   └── search.rs    # Quick search command
 ├── db/              # SQLite database layer
 │   ├── schema.rs    # Migrations
 │   └── queries.rs   # CRUD operations
@@ -68,14 +78,35 @@ src/
 # Development
 cargo build                    # Debug build
 cargo build --release          # Release build
-cargo test                     # Run tests
-cargo clippy --all-targets     # Lint check
+
+# Quality Checks (run these before committing)
 cargo fmt                      # Format code
+cargo clippy --all-targets     # Run linter (catch common mistakes and enforce style)
+cargo test                     # Run all tests
+cargo test --lib               # Run only library tests (faster)
 
 # Running
 ./target/release/olx-tracker --help
 ./target/release/olx-tracker list
 ./target/release/olx-tracker run
+```
+
+## Pre-Commit Checklist
+
+Before committing changes, always run:
+
+```bash
+# 1. Format code
+cargo fmt
+
+# 2. Check lints (should have no warnings)
+cargo clippy --all-targets
+
+# 3. Run tests (should all pass)
+cargo test
+
+# 4. Build release (optional, ensures release build works)
+cargo build --release
 ```
 
 ## Adding New Features
@@ -93,8 +124,9 @@ cargo fmt                      # Format code
 
 ### New CLI Command
 1. Add variant to `Commands` enum in `main.rs`
-2. Create handler function `cmd_my_command()`
-3. Add match arm in `main()`
+2. Create `src/commands/my_command.rs` with `cmd_my_command()` function
+3. Export in `src/commands/mod.rs`
+4. Add match arm in `main.rs` calling `commands::cmd_my_command()`
 
 ## Database
 

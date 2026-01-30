@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use fake_user_agent::get_rua;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, HOST, REFERER};
+use reqwest::header::{
+    ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONNECTION, HOST, HeaderMap,
+    HeaderValue, REFERER,
+};
 use reqwest::{Client, Proxy};
 use std::str::FromStr;
 use std::time::Duration;
@@ -9,6 +12,20 @@ use tracing::{debug, info};
 use crate::config::Config;
 
 use super::models::{LocationResponse, LocationResult, OfferData, SearchResponse};
+
+/// Mask credentials in proxy URL for safe logging
+fn mask_proxy_credentials(url: &str) -> String {
+    // Try to parse and mask credentials like "user:pass@host"
+    if let Some(at_pos) = url.find('@') {
+        // Find the protocol separator
+        if let Some(proto_end) = url.find("://") {
+            let proto = &url[..proto_end + 3];
+            let after_at = &url[at_pos + 1..];
+            return format!("{proto}***:***@{after_at}");
+        }
+    }
+    url.to_string()
+}
 
 /// Sort order for search results
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -52,6 +69,7 @@ impl FromStr for SortOrder {
     }
 }
 
+#[derive(Debug)]
 pub struct OlxClient {
     client: Client,
     base_url: String,
@@ -102,7 +120,9 @@ impl OlxClient {
         headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
 
         // Extract host from base URL for proper Host header
-        let host = config.api.get_base_url()
+        let host = config
+            .api
+            .get_base_url()
             .trim_start_matches("https://")
             .trim_start_matches("http://")
             .split('/')
@@ -113,7 +133,7 @@ impl OlxClient {
         }
 
         // Referer makes it look like we came from the website
-        let referer = format!("https://{}/", host);
+        let referer = format!("https://{host}/");
         if let Ok(referer_value) = HeaderValue::from_str(&referer) {
             headers.insert(REFERER, referer_value);
         }
@@ -134,10 +154,11 @@ impl OlxClient {
 
         if config.proxy.enabled {
             if let Some(proxy_url) = &config.proxy.url {
-                let proxy = Proxy::all(proxy_url)
-                    .with_context(|| format!("Invalid proxy URL: {proxy_url}"))?;
+                let proxy = Proxy::all(proxy_url).with_context(|| {
+                    format!("Invalid proxy URL: {}", mask_proxy_credentials(proxy_url))
+                })?;
                 client_builder = client_builder.proxy(proxy);
-                info!("Using proxy: {}", proxy_url);
+                info!("Using proxy: {}", mask_proxy_credentials(proxy_url));
             }
         }
 
@@ -155,9 +176,7 @@ impl OlxClient {
 
     /// Lookup city ID from city name using autocomplete API
     pub async fn lookup_city(&self, city_name: &str) -> Result<Option<LocationResult>> {
-        let base = self.base_url
-            .replace("/api/v1/offers", "")
-            .replace("/api/v1/offer", "");
+        let base = self.base_url.replace("/api/v1/offers", "").replace("/api/v1/offer", "");
         let url = format!(
             "{}/api/v1/geo-encoder/location-autocomplete/?query={}",
             base,
@@ -170,26 +189,29 @@ impl OlxClient {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body =
+                response.text().await.unwrap_or_else(|e| format!("<failed to read body: {e}>"));
             anyhow::bail!("City lookup failed with status {status}: {body}");
         }
 
-        let result: LocationResponse = response.json().await.context("Failed to parse location response")?;
+        let result: LocationResponse =
+            response.json().await.context("Failed to parse location response")?;
 
         // Smart matching: prioritize exact city match, then region match
         let query_lower = city_name.to_lowercase();
 
         // 1. Exact city name match
-        if let Some(loc) = result.data.iter().find(|loc| {
-            loc.city.name.to_lowercase() == query_lower
-        }) {
+        if let Some(loc) =
+            result.data.iter().find(|loc| loc.city.name.to_lowercase() == query_lower)
+        {
             return Ok(Some(loc.clone()));
         }
 
         // 2. Region/municipality match (e.g., "Porto" matches any city in Porto region)
         if let Some(loc) = result.data.iter().find(|loc| {
             loc.region.as_ref().map(|r| r.name.to_lowercase()) == Some(query_lower.clone())
-                || loc.municipality.as_ref().map(|m| m.name.to_lowercase()) == Some(query_lower.clone())
+                || loc.municipality.as_ref().map(|m| m.name.to_lowercase())
+                    == Some(query_lower.clone())
         }) {
             return Ok(Some(loc.clone()));
         }
@@ -229,7 +251,8 @@ impl OlxClient {
 
         let status = response.status();
         if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
+            let body =
+                response.text().await.unwrap_or_else(|e| format!("<failed to read body: {e}>"));
             anyhow::bail!("API request failed with status {status}: {body}");
         }
 
@@ -290,6 +313,29 @@ impl OlxClient {
     }
 }
 
+/// Trait for search client operations, enabling testing via mocking
+#[async_trait::async_trait]
+pub trait SearchClient {
+    async fn lookup_city(&self, city_name: &str) -> Result<Option<LocationResult>>;
+    async fn search_all(&self, params: &SearchParams, max_results: i32) -> Result<Vec<OfferData>>;
+    fn request_delay(&self) -> Duration;
+}
+
+#[async_trait::async_trait]
+impl SearchClient for OlxClient {
+    async fn lookup_city(&self, city_name: &str) -> Result<Option<LocationResult>> {
+        self.lookup_city(city_name).await
+    }
+
+    async fn search_all(&self, params: &SearchParams, max_results: i32) -> Result<Vec<OfferData>> {
+        self.search_all(params, max_results).await
+    }
+
+    fn request_delay(&self) -> Duration {
+        self.request_delay()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,5 +345,48 @@ mod tests {
         let params = SearchParams::default();
         assert_eq!(params.offset, 0);
         assert_eq!(params.limit, 50);
+    }
+
+    #[test]
+    fn test_mask_proxy_credentials_with_auth() {
+        let url = "socks5://user:password@proxy.example.com:1080";
+        let masked = mask_proxy_credentials(url);
+        assert_eq!(masked, "socks5://***:***@proxy.example.com:1080");
+    }
+
+    #[test]
+    fn test_mask_proxy_credentials_http_with_auth() {
+        let url = "http://admin:secret123@10.0.0.1:8080";
+        let masked = mask_proxy_credentials(url);
+        assert_eq!(masked, "http://***:***@10.0.0.1:8080");
+    }
+
+    #[test]
+    fn test_mask_proxy_credentials_https_with_auth() {
+        let url = "https://myuser:mypass@proxy.corp.net:3128/path";
+        let masked = mask_proxy_credentials(url);
+        assert_eq!(masked, "https://***:***@proxy.corp.net:3128/path");
+    }
+
+    #[test]
+    fn test_mask_proxy_credentials_no_auth() {
+        let url = "socks5://proxy.example.com:1080";
+        let masked = mask_proxy_credentials(url);
+        assert_eq!(masked, url);
+    }
+
+    #[test]
+    fn test_mask_proxy_credentials_no_protocol() {
+        // Edge case: @ symbol but no protocol - should return unchanged
+        let url = "user:pass@host:port";
+        let masked = mask_proxy_credentials(url);
+        assert_eq!(masked, url);
+    }
+
+    #[test]
+    fn test_mask_proxy_credentials_empty() {
+        let url = "";
+        let masked = mask_proxy_credentials(url);
+        assert_eq!(masked, url);
     }
 }

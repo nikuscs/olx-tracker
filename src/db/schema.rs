@@ -1,12 +1,10 @@
 use anyhow::Result;
 use rusqlite::Connection;
-use rusqlite_migration::{Migrations, M};
+use rusqlite_migration::{M, Migrations};
 
 /// Returns all migrations in order.
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![
-        M::up(include_str!("../../migrations/V1__initial_schema.sql")),
-    ])
+    Migrations::new(vec![M::up(include_str!("../../migrations/V1__initial_schema.sql"))])
 }
 
 pub fn run_migrations(conn: &mut Connection) -> Result<()> {

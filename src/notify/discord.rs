@@ -8,6 +8,7 @@ use crate::db::Listing;
 
 use super::Notifier;
 
+#[derive(Debug)]
 pub struct DiscordNotifier {
     client: Client,
     webhook_url: String,
@@ -53,7 +54,8 @@ impl DiscordNotifier {
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+            let body =
+                response.text().await.unwrap_or_else(|e| format!("<failed to read body: {e}>"));
             warn!("Discord webhook returned non-success status: {} - {}", status, body);
         }
 

@@ -24,6 +24,12 @@ pub struct FilterChain {
     filters: Vec<Box<dyn Filter>>,
 }
 
+impl std::fmt::Debug for FilterChain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FilterChain").field("filter_count", &self.filters.len()).finish()
+    }
+}
+
 impl FilterChain {
     pub fn new() -> Self {
         Self::default()
@@ -149,5 +155,46 @@ mod tests {
         let search = make_test_search();
 
         assert!(!chain.apply(&offer, &search));
+    }
+
+    #[test]
+    fn test_filter_chain_with_defaults() {
+        let chain = FilterChain::with_defaults();
+        assert_eq!(chain.len(), 3); // keyword, price, radius
+        assert!(!chain.is_empty());
+    }
+
+    #[test]
+    fn test_filter_chain_len_and_empty() {
+        let mut chain = FilterChain::new();
+        assert_eq!(chain.len(), 0);
+        assert!(chain.is_empty());
+
+        chain.add(Box::new(AlwaysPass));
+        assert_eq!(chain.len(), 1);
+        assert!(!chain.is_empty());
+
+        chain.add(Box::new(AlwaysPass));
+        assert_eq!(chain.len(), 2);
+    }
+
+    #[test]
+    fn test_filter_chain_debug() {
+        let mut chain = FilterChain::new();
+        chain.add(Box::new(AlwaysPass));
+        chain.add(Box::new(AlwaysFail));
+
+        let debug_str = format!("{:?}", chain);
+        assert!(debug_str.contains("FilterChain"));
+        assert!(debug_str.contains("filter_count"));
+    }
+
+    #[test]
+    fn test_filter_name() {
+        let pass_filter = AlwaysPass;
+        let fail_filter = AlwaysFail;
+
+        assert_eq!(pass_filter.name(), "AlwaysPass");
+        assert_eq!(fail_filter.name(), "AlwaysFail");
     }
 }

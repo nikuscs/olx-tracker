@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::Serialize;
 use std::path::Path;
 
 use super::schema::run_migrations;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Search {
     pub id: i64,
     pub name: String,
@@ -21,7 +22,7 @@ pub struct Search {
     pub expires_at: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Listing {
     pub id: i64,
     pub search_id: i64,
@@ -37,7 +38,7 @@ pub struct Listing {
     pub is_deal: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SearchStats {
     pub search_id: i64,
     pub avg_price: Option<f64>,
@@ -47,7 +48,7 @@ pub struct SearchStats {
     pub last_updated_at: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PriceHistory {
     pub id: i64,
     pub listing_id: i64,
@@ -55,6 +56,7 @@ pub struct PriceHistory {
     pub recorded_at: String,
 }
 
+#[derive(Debug)]
 pub struct Database {
     conn: Connection,
 }
@@ -75,6 +77,51 @@ impl Database {
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         run_migrations(&mut conn)?;
         Ok(Self { conn })
+    }
+
+    // Helper methods for row mapping
+
+    fn map_search_row(row: &rusqlite::Row) -> rusqlite::Result<Search> {
+        Ok(Search {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            keyword: row.get(2)?,
+            min_price: row.get(3)?,
+            max_price: row.get(4)?,
+            city: row.get(5)?,
+            radius_km: row.get(6)?,
+            category_id: row.get(7)?,
+            sort_order: row.get::<_, Option<String>>(8)?.unwrap_or_else(|| "newest".to_string()),
+            active: row.get::<_, i32>(9)? != 0,
+            created_at: row.get(10)?,
+            expires_at: row.get(11)?,
+        })
+    }
+
+    fn map_listing_row(row: &rusqlite::Row) -> rusqlite::Result<Listing> {
+        Ok(Listing {
+            id: row.get(0)?,
+            search_id: row.get(1)?,
+            title: row.get(2)?,
+            price: row.get(3)?,
+            currency: row.get(4)?,
+            url: row.get(5)?,
+            city: row.get(6)?,
+            region: row.get(7)?,
+            seller_name: row.get(8)?,
+            first_seen_at: row.get(9)?,
+            last_seen_at: row.get(10)?,
+            is_deal: row.get::<_, i32>(11)? != 0,
+        })
+    }
+
+    fn map_price_history_row(row: &rusqlite::Row) -> rusqlite::Result<PriceHistory> {
+        Ok(PriceHistory {
+            id: row.get(0)?,
+            listing_id: row.get(1)?,
+            price: row.get(2)?,
+            recorded_at: row.get(3)?,
+        })
     }
 
     // Search CRUD operations
@@ -107,22 +154,7 @@ impl Database {
                 "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at, expires_at
                  FROM searches WHERE id = ?1",
                 params![id],
-                |row| {
-                    Ok(Search {
-                        id: row.get(0)?,
-                        name: row.get(1)?,
-                        keyword: row.get(2)?,
-                        min_price: row.get(3)?,
-                        max_price: row.get(4)?,
-                        city: row.get(5)?,
-                        radius_km: row.get(6)?,
-                        category_id: row.get(7)?,
-                        sort_order: row.get::<_, Option<String>>(8)?.unwrap_or_else(|| "newest".to_string()),
-                        active: row.get::<_, i32>(9)? != 0,
-                        created_at: row.get(10)?,
-                        expires_at: row.get(11)?,
-                    })
-                },
+                Self::map_search_row,
             )
             .optional()
             .context("Failed to get search")
@@ -140,24 +172,7 @@ impl Database {
 
         let mut stmt = self.conn.prepare(sql)?;
         let searches = stmt
-            .query_map([], |row| {
-                Ok(Search {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    keyword: row.get(2)?,
-                    min_price: row.get(3)?,
-                    max_price: row.get(4)?,
-                    city: row.get(5)?,
-                    radius_km: row.get(6)?,
-                    category_id: row.get(7)?,
-                    sort_order: row
-                        .get::<_, Option<String>>(8)?
-                        .unwrap_or_else(|| "newest".to_string()),
-                    active: row.get::<_, i32>(9)? != 0,
-                    created_at: row.get(10)?,
-                    expires_at: row.get(11)?,
-                })
-            })?
+            .query_map([], Self::map_search_row)?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(searches)
@@ -230,22 +245,7 @@ impl Database {
                 "SELECT id, search_id, title, price, currency, url, city, region, seller_name,
                  first_seen_at, last_seen_at, is_deal FROM listings WHERE id = ?1",
                 params![id],
-                |row| {
-                    Ok(Listing {
-                        id: row.get(0)?,
-                        search_id: row.get(1)?,
-                        title: row.get(2)?,
-                        price: row.get(3)?,
-                        currency: row.get(4)?,
-                        url: row.get(5)?,
-                        city: row.get(6)?,
-                        region: row.get(7)?,
-                        seller_name: row.get(8)?,
-                        first_seen_at: row.get(9)?,
-                        last_seen_at: row.get(10)?,
-                        is_deal: row.get::<_, i32>(11)? != 0,
-                    })
-                },
+                Self::map_listing_row,
             )
             .optional()
             .context("Failed to get listing")
@@ -259,22 +259,7 @@ impl Database {
         )?;
 
         let listings = stmt
-            .query_map(params![search_id], |row| {
-                Ok(Listing {
-                    id: row.get(0)?,
-                    search_id: row.get(1)?,
-                    title: row.get(2)?,
-                    price: row.get(3)?,
-                    currency: row.get(4)?,
-                    url: row.get(5)?,
-                    city: row.get(6)?,
-                    region: row.get(7)?,
-                    seller_name: row.get(8)?,
-                    first_seen_at: row.get(9)?,
-                    last_seen_at: row.get(10)?,
-                    is_deal: row.get::<_, i32>(11)? != 0,
-                })
-            })?
+            .query_map(params![search_id], Self::map_listing_row)?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(listings)
@@ -299,41 +284,11 @@ impl Database {
         let mut stmt = self.conn.prepare(sql)?;
 
         let listings = if let Some(sid) = search_id {
-            stmt.query_map(params![sid], |row| {
-                Ok(Listing {
-                    id: row.get(0)?,
-                    search_id: row.get(1)?,
-                    title: row.get(2)?,
-                    price: row.get(3)?,
-                    currency: row.get(4)?,
-                    url: row.get(5)?,
-                    city: row.get(6)?,
-                    region: row.get(7)?,
-                    seller_name: row.get(8)?,
-                    first_seen_at: row.get(9)?,
-                    last_seen_at: row.get(10)?,
-                    is_deal: row.get::<_, i32>(11)? != 0,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?
+            stmt.query_map(params![sid], Self::map_listing_row)?
+                .collect::<Result<Vec<_>, _>>()?
         } else {
-            stmt.query_map([], |row| {
-                Ok(Listing {
-                    id: row.get(0)?,
-                    search_id: row.get(1)?,
-                    title: row.get(2)?,
-                    price: row.get(3)?,
-                    currency: row.get(4)?,
-                    url: row.get(5)?,
-                    city: row.get(6)?,
-                    region: row.get(7)?,
-                    seller_name: row.get(8)?,
-                    first_seen_at: row.get(9)?,
-                    last_seen_at: row.get(10)?,
-                    is_deal: row.get::<_, i32>(11)? != 0,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?
+            stmt.query_map([], Self::map_listing_row)?
+                .collect::<Result<Vec<_>, _>>()?
         };
 
         Ok(listings)
@@ -364,14 +319,7 @@ impl Database {
         )?;
 
         let history = stmt
-            .query_map(params![listing_id], |row| {
-                Ok(PriceHistory {
-                    id: row.get(0)?,
-                    listing_id: row.get(1)?,
-                    price: row.get(2)?,
-                    recorded_at: row.get(3)?,
-                })
-            })?
+            .query_map(params![listing_id], Self::map_price_history_row)?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(history)
@@ -473,7 +421,8 @@ mod tests {
     fn test_listing_upsert() {
         let db = Database::open_in_memory().unwrap();
 
-        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
 
         // Insert new listing
         let is_new = db
@@ -520,7 +469,8 @@ mod tests {
     fn test_search_stats() {
         let db = Database::open_in_memory().unwrap();
 
-        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
 
         db.upsert_listing(1, search_id, "A", Some(100.0), "EUR", "url1", None, None, None).unwrap();
         db.upsert_listing(2, search_id, "B", Some(200.0), "EUR", "url2", None, None, None).unwrap();
@@ -531,5 +481,228 @@ mod tests {
         assert_eq!(stats.min_price, Some(100.0));
         assert_eq!(stats.max_price, Some(300.0));
         assert_eq!(stats.total_listings, 3);
+    }
+
+    #[test]
+    fn test_set_search_active() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+
+        // Should be active by default
+        let search = db.get_search(search_id).unwrap().unwrap();
+        assert!(search.active);
+
+        // Deactivate
+        db.set_search_active(search_id, false).unwrap();
+        let search = db.get_search(search_id).unwrap().unwrap();
+        assert!(!search.active);
+
+        // Reactivate
+        db.set_search_active(search_id, true).unwrap();
+        let search = db.get_search(search_id).unwrap().unwrap();
+        assert!(search.active);
+    }
+
+    #[test]
+    fn test_list_searches_active_only() {
+        let db = Database::open_in_memory().unwrap();
+
+        let active_id = db.create_search("Active", "test1", None, None, None, None, None, None, None).unwrap();
+        let inactive_id = db.create_search("Inactive", "test2", None, None, None, None, None, None, None).unwrap();
+
+        db.set_search_active(inactive_id, false).unwrap();
+
+        // Get only active searches
+        let active_searches = db.list_searches(true).unwrap();
+        assert_eq!(active_searches.len(), 1);
+        assert_eq!(active_searches[0].id, active_id);
+
+        // Get all searches
+        let all_searches = db.list_searches(false).unwrap();
+        assert_eq!(all_searches.len(), 2);
+    }
+
+    #[test]
+    fn test_get_deals() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+
+        db.upsert_listing(1, search_id, "Normal", Some(100.0), "EUR", "url1", None, None, None).unwrap();
+        db.upsert_listing(2, search_id, "Deal", Some(50.0), "EUR", "url2", None, None, None).unwrap();
+
+        // Mark one as a deal
+        db.mark_as_deal(2, true).unwrap();
+
+        let deals = db.get_deals(Some(search_id)).unwrap();
+        assert_eq!(deals.len(), 1);
+        assert_eq!(deals[0].id, 2);
+        assert!(deals[0].is_deal);
+
+        // Get all deals
+        let all_deals = db.get_deals(None).unwrap();
+        assert_eq!(all_deals.len(), 1);
+    }
+
+    #[test]
+    fn test_get_search_stats() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+
+        // No stats initially
+        let stats = db.get_search_stats(search_id).unwrap();
+        assert!(stats.is_none());
+
+        // Add listings and update stats
+        db.upsert_listing(1, search_id, "A", Some(100.0), "EUR", "url", None, None, None).unwrap();
+        db.update_search_stats(search_id).unwrap();
+
+        let stats = db.get_search_stats(search_id).unwrap();
+        assert!(stats.is_some());
+        let stats = stats.unwrap();
+        assert_eq!(stats.avg_price, Some(100.0));
+        assert_eq!(stats.total_listings, 1);
+    }
+
+    #[test]
+    fn test_listing_with_images_and_region() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+
+        db.upsert_listing(
+            1,
+            search_id,
+            "Test Item",
+            Some(100.0),
+            "EUR",
+            "https://example.com",
+            Some("Porto"),
+            Some("Norte"),
+            Some("John Doe"),
+        )
+        .unwrap();
+
+        let listing = db.get_listing(1).unwrap().unwrap();
+        assert_eq!(listing.city, Some("Porto".to_string()));
+        assert_eq!(listing.region, Some("Norte".to_string()));
+        assert_eq!(listing.seller_name, Some("John Doe".to_string()));
+    }
+
+    #[test]
+    fn test_listing_without_price() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+
+        db.upsert_listing(1, search_id, "Free Item", None, "EUR", "url", None, None, None).unwrap();
+
+        let listing = db.get_listing(1).unwrap().unwrap();
+        assert!(listing.price.is_none());
+
+        // Stats only count listings with prices
+        let stats = db.update_search_stats(search_id).unwrap();
+        assert_eq!(stats.total_listings, 0);
+    }
+
+    #[test]
+    fn test_price_history_tracks_changes() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+
+        // Initial price
+        db.upsert_listing(1, search_id, "Item", Some(100.0), "EUR", "url", None, None, None).unwrap();
+
+        // Price drop
+        db.upsert_listing(1, search_id, "Item", Some(80.0), "EUR", "url", None, None, None).unwrap();
+
+        // Price increase
+        db.upsert_listing(1, search_id, "Item", Some(90.0), "EUR", "url", None, None, None).unwrap();
+
+        let history = db.get_price_history(1).unwrap();
+        assert_eq!(history.len(), 3);
+        assert_eq!(history[0].price, Some(100.0));
+        assert_eq!(history[1].price, Some(80.0));
+        assert_eq!(history[2].price, Some(90.0));
+    }
+
+    #[test]
+    fn test_get_nonexistent_search() {
+        let db = Database::open_in_memory().unwrap();
+        let result = db.get_search(99999).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_nonexistent_listing() {
+        let db = Database::open_in_memory().unwrap();
+        let result = db.get_listing(99999).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_delete_nonexistent_search() {
+        let db = Database::open_in_memory().unwrap();
+        let deleted = db.delete_search(99999).unwrap();
+        assert!(!deleted);
+    }
+
+    #[test]
+    fn test_search_with_all_fields() {
+        let db = Database::open_in_memory().unwrap();
+
+        let id = db
+            .create_search(
+                "Full Search",
+                "laptop",
+                Some(500.0),
+                Some(1500.0),
+                Some("Lisbon"),
+                Some(25),
+                Some(42),
+                Some("newest"),
+                Some("2024-12-31T23:59:59Z"),
+            )
+            .unwrap();
+
+        let search = db.get_search(id).unwrap().unwrap();
+        assert_eq!(search.name, "Full Search");
+        assert_eq!(search.keyword, "laptop");
+        assert_eq!(search.min_price, Some(500.0));
+        assert_eq!(search.max_price, Some(1500.0));
+        assert_eq!(search.city, Some("Lisbon".to_string()));
+        assert_eq!(search.radius_km, Some(25));
+        assert_eq!(search.category_id, Some(42));
+        assert_eq!(search.sort_order, "newest");
+        assert_eq!(search.expires_at, Some("2024-12-31T23:59:59Z".to_string()));
+    }
+
+    #[test]
+    fn test_stats_with_mixed_prices() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+
+        // Mix of priced and free items
+        db.upsert_listing(1, search_id, "A", Some(100.0), "EUR", "url1", None, None, None).unwrap();
+        db.upsert_listing(2, search_id, "B", None, "EUR", "url2", None, None, None).unwrap();
+        db.upsert_listing(3, search_id, "C", Some(200.0), "EUR", "url3", None, None, None).unwrap();
+
+        let stats = db.update_search_stats(search_id).unwrap();
+        // Should only count and average the priced items
+        assert_eq!(stats.avg_price, Some(150.0));
+        assert_eq!(stats.total_listings, 2);
+    }
+
+    #[test]
+    fn test_mark_multiple_deals() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db.create_search("Test", "test", None, None, None, None, None, None, None).unwrap();
+
+        db.upsert_listing(1, search_id, "Deal1", Some(50.0), "EUR", "url1", None, None, None).unwrap();
+        db.upsert_listing(2, search_id, "Deal2", Some(60.0), "EUR", "url2", None, None, None).unwrap();
+        db.upsert_listing(3, search_id, "Normal", Some(100.0), "EUR", "url3", None, None, None).unwrap();
+
+        db.mark_as_deal(1, true).unwrap();
+        db.mark_as_deal(2, true).unwrap();
+
+        let deals = db.get_deals(Some(search_id)).unwrap();
+        assert_eq!(deals.len(), 2);
     }
 }

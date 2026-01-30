@@ -23,9 +23,7 @@ impl Filter for RadiusFilter {
 
         // If no radius but city is specified, do exact city match
         if let Some(offer_city) = offer.get_city() {
-            let offer_city_lower: String = offer_city.to_lowercase();
-            let search_city_lower: String = search_city.to_lowercase();
-            return offer_city_lower == search_city_lower;
+            return offer_city.eq_ignore_ascii_case(search_city);
         }
 
         // No location info on offer, include it anyway
@@ -49,7 +47,11 @@ mod tests {
             url: "https://test.com".to_string(),
             params: vec![],
             location: city.map(|c| OfferLocation {
-                city: Some(LocationCity { id: Some(1), name: c.to_string(), normalized_name: None }),
+                city: Some(LocationCity {
+                    id: Some(1),
+                    name: c.to_string(),
+                    normalized_name: None,
+                }),
                 region: None,
             }),
             user: None,
@@ -120,5 +122,21 @@ mod tests {
         let search = make_search(Some("porto"), None);
 
         assert!(filter.apply(&offer, &search));
+    }
+
+    #[test]
+    fn test_offer_no_location_with_city_filter() {
+        let filter = RadiusFilter;
+        let offer = make_offer(None);
+        let search = make_search(Some("Porto"), None);
+
+        // Offer without location still passes (we include it)
+        assert!(filter.apply(&offer, &search));
+    }
+
+    #[test]
+    fn test_filter_name() {
+        let filter = RadiusFilter;
+        assert_eq!(filter.name(), "RadiusFilter");
     }
 }
