@@ -2,6 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
+use chrono::{Duration as ChronoDuration, Utc};
 use clap::{Parser, Subcommand};
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
@@ -103,6 +104,10 @@ enum Commands {
         /// Sort order: newest, cheapest, expensive, relevance
         #[arg(short, long, default_value = "newest")]
         sort: String,
+
+        /// Expire search after N days (stops scanning, keeps data)
+        #[arg(long)]
+        days: Option<i64>,
     },
 
     /// List all saved searches
@@ -257,8 +262,8 @@ async fn main() -> Result<()> {
     let db = Database::open(db_path)?;
 
     match cli.command {
-        Commands::Add { name, keyword, min_price, max_price, city, radius, category, sort } => {
-            cmd_add(&db, &name, &keyword, min_price, max_price, city, radius, category, &sort)?;
+        Commands::Add { name, keyword, min_price, max_price, city, radius, category, sort, days } => {
+            cmd_add(&db, &name, &keyword, min_price, max_price, city, radius, category, &sort, days)?;
         }
         Commands::List { all } => {
             cmd_list(&db, all)?;
@@ -300,9 +305,16 @@ fn cmd_add(
     radius: Option<i32>,
     category: Option<i64>,
     sort: &str,
+    days: Option<i64>,
 ) -> Result<()> {
     // Validate sort order
     let _: SortOrder = sort.parse().map_err(|e: String| anyhow::anyhow!("{e}"))?;
+
+    // Calculate expires_at if days is specified
+    let expires_at = days.map(|d| {
+        let expires = Utc::now() + ChronoDuration::days(d);
+        expires.to_rfc3339()
+    });
 
     let id = db.create_search(
         name,
@@ -313,6 +325,7 @@ fn cmd_add(
         radius,
         category,
         Some(sort),
+        expires_at.as_deref(),
     )?;
 
     let price_info = match (min_price, max_price) {
@@ -321,7 +334,8 @@ fn cmd_add(
         (None, Some(max)) => format!(", max: {max:.0}€"),
         (None, None) => String::new(),
     };
-    println!("Created search '{name}' with ID {id} (sort: {sort}{price_info})");
+    let ttl_info = days.map_or(String::new(), |d| format!(", expires in {d} days"));
+    println!("Created search '{name}' with ID {id} (sort: {sort}{price_info}{ttl_info})");
     Ok(())
 }
 

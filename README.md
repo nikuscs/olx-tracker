@@ -32,6 +32,7 @@ olx-tracker search "bike" --city Porto -r 30
 olx-tracker add -n "PS5" -k "playstation 5"
 olx-tracker add -n "PS5 deals" -k "ps5" --min-price 300 -p 450 -s cheapest
 olx-tracker add -n "PS5 Porto" -k "ps5" --city Porto -r 30
+olx-tracker add -n "PS5 temp" -k "ps5" --days 7              # expires in 7 days
 olx-tracker list
 olx-tracker toggle -s 1
 olx-tracker remove -s 1
@@ -39,14 +40,34 @@ olx-tracker stats -s 1
 olx-tracker deals
 ```
 
+| Flag | Description |
+|------|-------------|
+| `-n, --name` | Search name |
+| `-k, --keyword` | Search keyword |
+| `--min-price` | Min price filter |
+| `-p, --max-price` | Max price filter |
+| `-s, --sort` | newest, cheapest, expensive, relevance |
+| `--city` | City name |
+| `-r, --radius` | Radius in km |
+| `--days` | Auto-expire after N days |
+
 ## 🔄 Run & Daemon
 
 ```bash
-olx-tracker run
-olx-tracker run -s 1 -m 50
-olx-tracker daemon
-olx-tracker daemon -i 15 -m 100
+olx-tracker run                         # run all searches once
+olx-tracker run -s 1                    # run search ID 1 only
+olx-tracker run -m 50                   # max 50 results per search
+
+olx-tracker daemon                      # check every 30 min
+olx-tracker daemon -i 15                # check every 15 min
+olx-tracker daemon -i 60 -m 100         # every 60 min, max 100 results
 ```
+
+| Flag | Description |
+|------|-------------|
+| `-s, --search-id` | Run specific search only |
+| `-m, --max-results` | Max results per search (default: 100) |
+| `-i, --interval` | Check interval in minutes (default: 30) |
 
 ## 🌍 Countries
 
@@ -67,8 +88,8 @@ olx-tracker --notify-new --notify-drops --notify-deals run
 ## 🎯 Deals
 
 ```bash
-olx-tracker --deal-threshold 30 run
-olx-tracker --target-price 299 run
+olx-tracker --deal-threshold 30 run     # 30% below average = deal
+olx-tracker --target-price 299 run      # anything ≤299€ = deal
 ```
 
 ## 🌐 Proxy
@@ -81,7 +102,7 @@ olx-tracker --proxy "http://user:pass@proxy.com:8080" run
 ## 🔧 User Agent
 
 ```bash
-olx-tracker --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" search "iphone"
+olx-tracker --user-agent "Mozilla/5.0..." search "iphone"
 ```
 
 ## 🗄️ Database
@@ -115,6 +136,7 @@ olx-tracker --db /path/to/custom.db list
 - 🔔 Discord & webhook notifications
 - 🎯 Smart deal detection
 - 💰 Min/max price filtering
+- ⏰ Search TTL (auto-expire)
 - 🌍 Multi-country support (7 OLX regions)
 - 📍 Location + radius filtering
 - 🔄 Daemon mode

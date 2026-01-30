@@ -51,6 +51,7 @@ mod tests {
             sort_order: "newest".to_string(),
             active: true,
             created_at: "2024-01-01".to_string(),
+            expires_at: None,
         }
     }
 

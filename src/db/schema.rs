@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 #[cfg(test)]
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 1;
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -21,14 +21,6 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         migrate_v1(conn)?;
     }
 
-    if current_version < 2 {
-        migrate_v2(conn)?;
-    }
-
-    if current_version < 3 {
-        migrate_v3(conn)?;
-    }
-
     Ok(())
 }
 
@@ -40,12 +32,15 @@ fn migrate_v1(conn: &Connection) -> Result<()> {
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             keyword TEXT NOT NULL,
+            min_price REAL,
             max_price REAL,
             city TEXT,
             radius_km INTEGER,
             category_id INTEGER,
+            sort_order TEXT DEFAULT 'newest',
             active INTEGER DEFAULT 1,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT
         );
 
         -- Listings found from searches
@@ -89,32 +84,6 @@ fn migrate_v1(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_price_history_listing_id ON price_history(listing_id);
 
         INSERT INTO schema_version (version) VALUES (1);
-        ",
-    )?;
-
-    Ok(())
-}
-
-fn migrate_v2(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "
-        -- Add sort_order column to searches (default: 'newest')
-        ALTER TABLE searches ADD COLUMN sort_order TEXT DEFAULT 'newest';
-
-        INSERT INTO schema_version (version) VALUES (2);
-        ",
-    )?;
-
-    Ok(())
-}
-
-fn migrate_v3(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "
-        -- Add min_price column to searches (to filter out junk results)
-        ALTER TABLE searches ADD COLUMN min_price REAL;
-
-        INSERT INTO schema_version (version) VALUES (3);
         ",
     )?;
 

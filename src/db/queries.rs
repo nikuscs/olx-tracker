@@ -18,6 +18,7 @@ pub struct Search {
     pub sort_order: String,
     pub active: bool,
     pub created_at: String,
+    pub expires_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -89,12 +90,13 @@ impl Database {
         radius_km: Option<i32>,
         category_id: Option<i64>,
         sort_order: Option<&str>,
+        expires_at: Option<&str>,
     ) -> Result<i64> {
         let sort = sort_order.unwrap_or("newest");
         self.conn.execute(
-            "INSERT INTO searches (name, keyword, min_price, max_price, city, radius_km, category_id, sort_order)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![name, keyword, min_price, max_price, city, radius_km, category_id, sort],
+            "INSERT INTO searches (name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, expires_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![name, keyword, min_price, max_price, city, radius_km, category_id, sort, expires_at],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -102,7 +104,7 @@ impl Database {
     pub fn get_search(&self, id: i64) -> Result<Option<Search>> {
         self.conn
             .query_row(
-                "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at
+                "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at, expires_at
                  FROM searches WHERE id = ?1",
                 params![id],
                 |row| {
@@ -118,6 +120,7 @@ impl Database {
                         sort_order: row.get::<_, Option<String>>(8)?.unwrap_or_else(|| "newest".to_string()),
                         active: row.get::<_, i32>(9)? != 0,
                         created_at: row.get(10)?,
+                        expires_at: row.get(11)?,
                     })
                 },
             )
@@ -126,11 +129,12 @@ impl Database {
     }
 
     pub fn list_searches(&self, active_only: bool) -> Result<Vec<Search>> {
+        // active_only also excludes expired searches
         let sql = if active_only {
-            "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at
-             FROM searches WHERE active = 1 ORDER BY id"
+            "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at, expires_at
+             FROM searches WHERE active = 1 AND (expires_at IS NULL OR expires_at > datetime('now')) ORDER BY id"
         } else {
-            "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at
+            "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at, expires_at
              FROM searches ORDER BY id"
         };
 
@@ -151,6 +155,7 @@ impl Database {
                         .unwrap_or_else(|| "newest".to_string()),
                     active: row.get::<_, i32>(9)? != 0,
                     created_at: row.get(10)?,
+                    expires_at: row.get(11)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -446,6 +451,7 @@ mod tests {
                 Some(30),
                 None,
                 Some("cheapest"),
+                None, // expires_at
             )
             .unwrap();
 
@@ -467,7 +473,7 @@ mod tests {
     fn test_listing_upsert() {
         let db = Database::open_in_memory().unwrap();
 
-        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None).unwrap();
+        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
 
         // Insert new listing
         let is_new = db
@@ -514,7 +520,7 @@ mod tests {
     fn test_search_stats() {
         let db = Database::open_in_memory().unwrap();
 
-        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None).unwrap();
+        let search_id = db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
 
         db.upsert_listing(1, search_id, "A", Some(100.0), "EUR", "url1", None, None, None).unwrap();
         db.upsert_listing(2, search_id, "B", Some(200.0), "EUR", "url2", None, None, None).unwrap();
