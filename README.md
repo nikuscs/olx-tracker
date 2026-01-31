@@ -1,290 +1,209 @@
-# OLX Price Tracker
+# olx-tracker
 
-Fast Rust CLI to track OLX listings and alert on good deals.
+**Fast Rust CLI to track OLX.pt listings and get alerts on deals.**
+
+Search products, track price drops, filter by location, and receive notifications via Discord or webhooks when good deals appear.
+
+## Why?
+
+- **Fast** — Native Rust. Searches complete in milliseconds.
+- **Location-aware** — Filter by city/region with radius. Auto-resolves city names to OLX location IDs.
+- **Deal Detection** — Track searches over time and get notified when prices drop or new listings match your criteria.
+- **Notifications** — Discord webhooks, generic webhooks, or run your own alerting.
+- **Daemon Mode** — Run in background, checks periodically, alerts automatically.
 
 ## Install
 
 ```bash
+# From source (requires Rust)
+cargo install --git https://github.com/nikuscs/olx-tracker
+
+# Or clone and build
+git clone https://github.com/nikuscs/olx-tracker
+cd olx-tracker
 cargo build --release
 ```
 
-## Quick Search
+Pre-built binaries available in [Releases](https://github.com/nikuscs/olx-tracker/releases).
+
+## Usage
+
+### Search Listings
 
 ```bash
 olx-tracker search "iphone 14"
 olx-tracker search "macbook" --max 10 --sort cheapest
 olx-tracker search "ps5" --min-price 300 --max-price 500
-olx-tracker search "iphone" --city "Porto" --radius 30
-olx-tracker search "iphone" --city "Paços de Ferreira" --radius 50
-olx-tracker search "gaming handheld" --keyword "ayn" --city "Porto" --radius 40
-olx-tracker search "ps5" --format json
-olx-tracker search "ps5" --format markdown
+olx-tracker search "nintendo switch" --city "Porto" --radius 30
+olx-tracker search "bicicleta" --city "Lisboa" --radius 50 --sort newest
 ```
+
+**Output:**
+```
+OLX Search Results: "iphone 14"
+================================================================================
+  Price    Title                                              Location
+--------------------------------------------------------------------------------
+  €450     iPhone 14 Pro 128GB como novo                      Porto
+  €380     iPhone 14 128GB c/ caixa                           Vila Nova de Gaia
+  €520     iPhone 14 Pro Max 256GB                            Lisboa
+  
+💡 Found 3 listings
+```
+
+### Track Searches
+
+Save searches to monitor over time:
+
+```bash
+# Add a tracked search
+olx-tracker add --name "PS5 Deals" --keyword "ps5" --max-price 400 --city "Porto"
+
+# Add with auto-expire (temporary tracking)
+olx-tracker add --name "iPhone temp" --keyword "iphone 15" --days 7
+
+# List all tracked searches
+olx-tracker list
+
+# Check for new deals across all tracked searches
+olx-tracker deals
+
+# View stats for a specific search
+olx-tracker stats --search-id 1
+
+# Toggle search on/off
+olx-tracker toggle --search-id 1
+
+# Remove a search
+olx-tracker remove --search-id 1
+```
+
+### Daemon Mode
+
+Run in background with periodic checks:
+
+```bash
+# Start daemon (checks every 15 minutes by default)
+olx-tracker daemon
+
+# Custom interval
+olx-tracker daemon --interval 30  # Check every 30 minutes
+
+# With Discord notifications
+olx-tracker daemon --discord-webhook "https://discord.com/api/webhooks/..."
+```
+
+### Notifications
+
+Configure alerts for new listings matching your tracked searches:
+
+```bash
+# Discord webhook
+olx-tracker daemon --discord-webhook "https://discord.com/api/webhooks/xxx/yyy"
+
+# Generic webhook (POST JSON)
+olx-tracker daemon --webhook "https://your-server.com/olx-alerts"
+```
+
+**Discord alert example:**
+```
+🔔 New OLX Listing!
+PS5 Console + 2 Controllers
+€420 · Porto
+https://olx.pt/d/anuncio/...
+```
+
+## Options
+
+### Search Filters
 
 | Flag | Description |
 |------|-------------|
 | `--max` | Max results (default: 20) |
-| `--sort` | newest, cheapest, expensive, relevance |
-| `--min-price` | Minimum price filter |
-| `--max-price` | Maximum price filter |
-| `--city` | City/region name (auto-lookup) |
-| `--radius` | Radius in km from city |
-| `--keyword` | Additional keyword filter (must appear in title) |
-| `--category` | OLX category ID (filter by category) |
-| `--format` | table, json, markdown (aliases: md, llm) |
+| `--sort` | Sort: newest, cheapest, expensive, relevance |
+| `--min-price` | Minimum price |
+| `--max-price` | Maximum price |
+| `--city` | City/region name (auto-resolved) |
+| `--radius` | Radius from city in km |
+| `--keyword` | Additional keyword filter |
+| `--category` | OLX category ID |
 
-## Tracked Searches
-
-```bash
-olx-tracker add --name "PS5" --keyword "playstation 5"
-olx-tracker add --name "PS5 deals" --keyword "ps5" --min-price 300 --max-price 450 --sort cheapest
-olx-tracker add --name "iPhone Porto" --keyword "iphone" --city "Porto" --radius 30
-olx-tracker add --name "PS5 temp" --keyword "ps5" --days 7
-olx-tracker list
-olx-tracker toggle --search-id 1
-olx-tracker remove --search-id 1
-olx-tracker stats --search-id 1
-olx-tracker deals
-```
+### Output Formats
 
 | Flag | Description |
 |------|-------------|
-| `--name` | Search name |
-| `--keyword` | Search keyword |
-| `--min-price` | Min price filter |
-| `--max-price` | Max price filter |
-| `--sort` | newest, cheapest, expensive, relevance |
-| `--city` | City/region name |
-| `--radius` | Radius in km |
-| `--days` | Auto-expire after N days |
+| `--format table` | Human-readable table (default) |
+| `--format json` | JSON output for scripts |
+| `--format markdown` | Markdown for LLMs/docs |
 
-## Run & Daemon
-
-```bash
-olx-tracker run
-olx-tracker run --search-id 1
-olx-tracker run --max-results 50
-
-olx-tracker daemon
-olx-tracker daemon --interval 15
-olx-tracker daemon --interval 60 --max-results 100
-```
+### Daemon Options
 
 | Flag | Description |
 |------|-------------|
-| `--search-id` | Run specific search only |
-| `--max-results` | Max results per search (default: 100) |
-| `--interval` | Check interval in minutes (default: 30) |
-
-## Serve (HTTP API)
-
-```bash
-olx-tracker serve
-olx-tracker serve --host 0.0.0.0 --port 8080
-olx-tracker serve --timeout 120
-API_KEY=secret olx-tracker serve
-```
-
-| Flag | Description |
-|------|-------------|
-| `--host` | Bind address (default: 127.0.0.1) |
-| `--port` | Port to listen on (default: 8080) |
-| `--timeout` | Request timeout in seconds (default: 60) |
-| `--api-key` | API key for authentication (or use `API_KEY` env) |
-
-Endpoints (JSON):
-
-- `GET /health` - Health check (no auth required)
-- `POST /search` - Quick search
-- `POST /searches/add` - Add a tracked search
-- `POST /searches/list` - List tracked searches
-- `POST /searches/run` - Run searches
-- `POST /searches/daemon` - Start background daemon
-- `POST /searches/daemon/stop` - Stop background daemon
-- `POST /searches/deals` - Get deals
-- `POST /searches/stats` - Get search statistics
-- `POST /searches/toggle` - Toggle search active status
-- `POST /searches/remove` - Remove a search
-
-Auth: set `API_KEY` for the `serve` command and pass it via `x-api-key`, `api-key`, or `Authorization: Bearer ...` header.
-
-### Security Notes
-
-When deploying the HTTP API:
-
-- **Use HTTPS in production** - Deploy behind a reverse proxy (nginx, caddy) with TLS
-- **Set a strong API key** - Always use `API_KEY` when exposing to networks
-- **Rate limiting** - Consider rate limiting at the reverse proxy level
-- Request body size is limited to 1MB by default
-
-## Countries
-
-```bash
-olx-tracker --country pl search "iphone"
-```
-
-Supported: `pt` `pl` `ua` `ro` `bg` `kz` `uz`
-
-## Notifications
-
-```bash
-olx-tracker --discord "https://discord.com/api/webhooks/..." run
-olx-tracker --webhook "https://your-server.com/notify" run
-olx-tracker --notify-new --notify-drops --notify-deals run
-```
-
-## Deals
-
-```bash
-olx-tracker --deal-threshold 30 run     # 30% below average = deal
-olx-tracker --target-price 299 run      # anything <=299 = deal
-```
-
-## Proxy
-
-```bash
-olx-tracker --proxy "socks5://127.0.0.1:1080" search "iphone"
-olx-tracker --proxy "http://user:pass@proxy.com:8080" run
-```
-
-## User Agent
-
-```bash
-olx-tracker --user-agent "Mozilla/5.0..." search "iphone"
-```
-
-## Database
-
-```bash
-olx-tracker --db /path/to/custom.db list
-```
-
-## Global Flags
-
-| Flag | Description |
-|------|-------------|
-| `--config` | Config file path |
-| `--db` | Database path |
-| `--country` | OLX country |
-| `--proxy` | Proxy URL (socks5/http) |
-| `--user-agent` | Custom user agent |
-| `--discord` | Discord webhook URL |
+| `--interval` | Check interval in minutes (default: 15) |
+| `--discord-webhook` | Discord webhook URL for alerts |
 | `--webhook` | Generic webhook URL |
-| `--deal-threshold` | % below avg for deals |
-| `--target-price` | Max price for deals |
-| `--notify-new` | Notify new listings |
-| `--notify-drops` | Notify price drops |
-| `--notify-deals` | Notify deals |
 
-## Full Workflow Examples
+## Configuration
 
-### Example 1: Track iPhones in Paços de Ferreira with Discord alerts
+Tracked searches and history are stored in `~/.config/olx-tracker/`:
 
-```bash
-# 1. Quick search to see what's available
-olx-tracker search "iphone 14" --city "Paços de Ferreira" --radius 30 --min-price 200 --format markdown
-
-# 2. Create a tracked search (30% below avg = deal, notify Discord)
-olx-tracker add \
-  --name "iPhone PF" \
-  --keyword "iphone 14" \
-  --city "Paços de Ferreira" \
-  --radius 30 \
-  --min-price 200 \
-  --max-price 600 \
-  --sort cheapest \
-  --days 30
-
-# 3. Run once with Discord notifications
-olx-tracker \
-  --discord "https://discord.com/api/webhooks/YOUR_WEBHOOK" \
-  --deal-threshold 30 \
-  --notify-new \
-  --notify-deals \
-  run
-
-# 4. Or run as daemon (check every 15 min)
-olx-tracker \
-  --discord "https://discord.com/api/webhooks/YOUR_WEBHOOK" \
-  --deal-threshold 30 \
-  --notify-new \
-  --notify-deals \
-  daemon --interval 15
+```
+~/.config/olx-tracker/
+├── searches.json     # Tracked searches
+├── history.json      # Seen listings (deduplication)
+└── config.toml       # Global settings
 ```
 
-### Example 2: Track PS5 deals in Porto with webhook
-
-```bash
-# Create search
-olx-tracker add \
-  --name "PS5 Porto" \
-  --keyword "playstation 5" \
-  --city "Porto" \
-  --radius 50 \
-  --min-price 300 \
-  --max-price 450 \
-  --sort cheapest
-
-# Run with webhook and target price
-olx-tracker \
-  --webhook "https://your-api.com/olx-notify" \
-  --target-price 350 \
-  --notify-deals \
-  run --search-id 1
+**config.toml:**
+```toml
+default_city = "Porto"
+default_radius = 30
+check_interval_minutes = 15
+discord_webhook = "https://discord.com/api/webhooks/..."
 ```
 
-### Example 3: Quick JSON search for API/LLM integration
+## Examples
+
+### Find cheap PS5 near Porto
 
 ```bash
-# Get results as JSON (includes images)
-olx-tracker search "macbook pro" --max 5 --format json
-
-# Get results as markdown (for LLMs)
-olx-tracker search "macbook pro" --max 5 --format markdown
+olx-tracker search "ps5" --max-price 400 --city "Porto" --radius 50 --sort cheapest
 ```
 
-### Example 4: Full tracking with proxy
+### Track iPhone deals for a week
 
 ```bash
-# Search through proxy
-olx-tracker --proxy "socks5://127.0.0.1:1080" search "gaming laptop"
-
-# Track with all bells and whistles
-olx-tracker \
-  --proxy "socks5://127.0.0.1:1080" \
-  --discord "https://discord.com/api/webhooks/..." \
-  --deal-threshold 25 \
-  --notify-new \
-  --notify-drops \
-  --notify-deals \
-  daemon --interval 30 --max-results 50
+olx-tracker add --name "iPhone deals" --keyword "iphone 15" --max-price 700 --days 7
+olx-tracker daemon --discord-webhook "https://discord.com/..."
 ```
 
-## Output Formats
+### Export to JSON for processing
 
-| Format | Flag | Use Case |
-|--------|------|----------|
-| Table | `--format table` | CLI output (default) |
-| JSON | `--format json` | APIs, scripts, includes images |
-| Markdown | `--format markdown` | LLMs, docs, includes images |
+```bash
+olx-tracker search "macbook" --format json | jq '.[] | select(.price < 800)'
+```
 
-JSON output includes: `id`, `title`, `price`, `city`, `region`, `seller`, `url`, `image`, `images[]`, `created_at`
+### Multiple cities
 
-## Features
+```bash
+olx-tracker search "bicicleta" --city "Porto" --radius 100  # Porto + surrounding
+olx-tracker search "bicicleta" --city "Lisboa"              # Lisboa area
+```
 
-- Fast Rust implementation
-- Quick search without database
-- SQLite storage with price history
-- Discord & webhook notifications
-- Smart deal detection
-- Min/max price filtering
-- Image URLs in JSON/markdown output
-- Search TTL (auto-expire)
-- Multi-country support (7 OLX regions)
-- Location + radius filtering
-- Daemon mode
-- Proxy support (SOCKS5/HTTP)
-- Random user agent rotation
+## How It Works
+
+1. **Search** — Queries OLX.pt API with your filters
+2. **Parse** — Extracts listings, prices, locations, URLs
+3. **Track** — Saves seen listings to avoid duplicate alerts
+4. **Notify** — Sends webhooks when new matching listings appear
+
+## Portugal Coverage
+
+Works with all OLX.pt regions:
+- Major cities: Lisboa, Porto, Braga, Coimbra, Faro, etc.
+- Districts and municipalities
+- Radius-based filtering from any location
 
 ## License
 
