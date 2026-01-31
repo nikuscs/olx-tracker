@@ -218,6 +218,11 @@ Works with all OLX.pt regions:
 - Districts and municipalities
 - Radius-based filtering from any location
 
+## Related Projects
+
+- [⚖️ kante-kusta](https://github.com/nikuscs/kante-kusta) - KuantoKusta.pt price comparison CLI
+- [🦎 amz-crawler](https://github.com/nikuscs/amz-crawler) - Search Amazon with TLS fingerprinting, compare EU prices
+
 ## License
 
 MIT
