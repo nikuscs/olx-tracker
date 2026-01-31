@@ -1,6 +1,7 @@
 # olx-tracker
 
 ![CI](https://github.com/nikuscs/olx-tracker/actions/workflows/ci.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/nikuscs/olx-tracker)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 **Fast Rust CLI to track OLX.pt listings and get alerts on deals.**
