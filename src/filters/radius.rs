@@ -4,8 +4,6 @@ use crate::db::Search;
 use super::Filter;
 
 /// Filter based on city location
-/// Note: OLX API handles radius filtering server-side via the distance param,
-/// so this filter primarily checks if city matches when specified
 pub struct RadiusFilter;
 
 impl Filter for RadiusFilter {

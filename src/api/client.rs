@@ -104,14 +104,12 @@ impl Default for SearchParams {
 
 impl OlxClient {
     pub fn new(config: &Config) -> Result<Self> {
-        // Use custom user agent or generate a random realistic one
         let user_agent = if config.api.user_agent.contains("Mozilla") {
             config.api.user_agent.clone()
         } else {
             get_rua().to_string()
         };
 
-        // Build headers that mimic a real browser
         let mut headers = HeaderMap::new();
         headers.insert(ACCEPT, HeaderValue::from_static("application/json, text/plain, */*"));
         headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.9,pt;q=0.8"));
@@ -119,7 +117,6 @@ impl OlxClient {
         headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
         headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
 
-        // Extract host from base URL for proper Host header
         let host = config
             .api
             .get_base_url()
@@ -132,13 +129,11 @@ impl OlxClient {
             headers.insert(HOST, host_value);
         }
 
-        // Referer makes it look like we came from the website
         let referer = format!("https://{host}/");
         if let Ok(referer_value) = HeaderValue::from_str(&referer) {
             headers.insert(REFERER, referer_value);
         }
 
-        // Sec-Fetch headers (modern browsers send these)
         headers.insert("Sec-Fetch-Dest", HeaderValue::from_static("empty"));
         headers.insert("Sec-Fetch-Mode", HeaderValue::from_static("cors"));
         headers.insert("Sec-Fetch-Site", HeaderValue::from_static("same-origin"));
@@ -299,7 +294,6 @@ impl OlxClient {
                 break;
             }
 
-            // Rate limiting
             tokio::time::sleep(self.request_delay).await;
         }
 
@@ -339,7 +333,10 @@ impl SearchClient for OlxClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ApiConfig, AuthConfig, NotificationConfig, OlxCountry, ProxyConfig};
+    use crate::config::{
+        ApiConfig, AuthConfig, DatabaseConfig, DealConfig, NotificationConfig, OlxCountry,
+        ProxyConfig,
+    };
     use wiremock::matchers::method;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -353,8 +350,8 @@ mod tests {
                 base_url: Some(base_url),
             },
             proxy: ProxyConfig { enabled: false, url: None },
-            deals: Default::default(),
-            database: Default::default(),
+            deals: DealConfig::default(),
+            database: DatabaseConfig::default(),
             notifications: NotificationConfig::default(),
         }
     }
@@ -379,7 +376,7 @@ mod tests {
 
         let response_body = serde_json::json!({
             "data": [{
-                "id": 123456789,
+                "id": 123_456_789,
                 "title": "Test Listing",
                 "url": "https://www.olx.pt/d/test",
                 "params": []

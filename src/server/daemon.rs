@@ -186,6 +186,7 @@ pub fn run_searches_blocking(
 }
 
 #[cfg(test)]
+#[allow(clippy::significant_drop_tightening)]
 mod tests {
     use super::*;
     use crate::api::SearchParams;

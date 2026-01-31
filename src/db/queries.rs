@@ -79,8 +79,6 @@ impl Database {
         Ok(Self { conn })
     }
 
-    // Helper methods for row mapping
-
     fn map_search_row(row: &rusqlite::Row) -> rusqlite::Result<Search> {
         Ok(Search {
             id: row.get(0)?,
@@ -161,7 +159,6 @@ impl Database {
     }
 
     pub fn list_searches(&self, active_only: bool) -> Result<Vec<Search>> {
-        // active_only also excludes expired searches
         let sql = if active_only {
             "SELECT id, name, keyword, min_price, max_price, city, radius_km, category_id, sort_order, active, created_at, expires_at
              FROM searches WHERE active = 1 AND (expires_at IS NULL OR expires_at > datetime('now')) ORDER BY id"
@@ -216,12 +213,11 @@ impl Database {
                 params![id, title, price, currency, url, city, region, seller_name, now],
             )?;
 
-            // Record price change if different
             if existing.price != price {
                 self.record_price(id, price)?;
             }
 
-            Ok(false) // Not new
+            Ok(false)
         } else {
             // Insert new listing
             self.conn.execute(
@@ -230,10 +226,9 @@ impl Database {
                 params![id, search_id, title, price, currency, url, city, region, seller_name, now],
             )?;
 
-            // Record initial price
             self.record_price(id, price)?;
 
-            Ok(true) // Is new
+            Ok(true)
         }
     }
 
@@ -603,7 +598,6 @@ mod tests {
         let listing = db.get_listing(1).unwrap().unwrap();
         assert!(listing.price.is_none());
 
-        // Stats only count listings with prices
         let stats = db.update_search_stats(search_id).unwrap();
         assert_eq!(stats.total_listings, 0);
     }
@@ -696,7 +690,6 @@ mod tests {
         db.upsert_listing(3, search_id, "C", Some(200.0), "EUR", "url3", None, None, None).unwrap();
 
         let stats = db.update_search_stats(search_id).unwrap();
-        // Should only count and average the priced items
         assert_eq!(stats.avg_price, Some(150.0));
         assert_eq!(stats.total_listings, 2);
     }

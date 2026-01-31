@@ -177,6 +177,7 @@ impl Notifier for DiscordNotifier {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
 
@@ -349,7 +350,7 @@ mod tests {
         let embed = DiscordEmbed {
             title: "Test".to_string(),
             description: "Desc".to_string(),
-            color: 0x123456,
+            color: 0x0012_3456,
             fields: vec![],
             url: Some("https://example.com".to_string()),
         };

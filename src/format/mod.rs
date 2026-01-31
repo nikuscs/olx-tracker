@@ -261,6 +261,7 @@ pub fn truncate(s: &str, max_len: usize) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::option_if_let_else, clippy::significant_drop_tightening)]
 mod tests {
     use super::*;
     use crate::api::{LocationCity, OfferLocation, OfferParam, OfferPhoto, OfferUser, ParamValue};
@@ -271,15 +272,13 @@ mod tests {
         price: Option<f64>,
         city: Option<&str>,
     ) -> OfferData {
-        let params = if let Some(p) = price {
+        let params = price.map_or_else(Vec::new, |p| {
             vec![OfferParam {
                 key: "price".to_string(),
                 name: "Price".to_string(),
                 value: Some(ParamValue::Numeric { value: p, label: None }),
             }]
-        } else {
-            vec![]
-        };
+        });
 
         let location = city.map(|c| OfferLocation {
             city: Some(LocationCity { id: Some(1), name: c.to_string(), normalized_name: None }),

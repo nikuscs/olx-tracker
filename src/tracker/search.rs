@@ -177,6 +177,7 @@ impl<'a, C: SearchClient + ?Sized> SearchTracker<'a, C> {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp, clippy::option_if_let_else)]
 mod tests {
     use super::*;
     use crate::api::models::{OfferData, OfferParam, ParamValue};
