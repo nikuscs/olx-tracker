@@ -1,5 +1,8 @@
 # olx-tracker
 
+![CI](https://github.com/nikuscs/olx-tracker/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+
 **Fast Rust CLI to track OLX.pt listings and get alerts on deals.**
 
 Search products, track price drops, filter by location, and receive notifications via Discord or webhooks when good deals appear.
@@ -11,6 +14,15 @@ Search products, track price drops, filter by location, and receive notification
 - **Deal Detection** — Track searches over time and get notified when prices drop or new listings match your criteria.
 - **Notifications** — Discord webhooks, generic webhooks, or run your own alerting.
 - **Daemon Mode** — Run in background, checks periodically, alerts automatically.
+
+> **Disclaimer:** This project is for **educational purposes and AI automation research only**.
+> The authors are not responsible for any misuse or for any damages resulting from the use of this tool.
+> Users are solely responsible for ensuring compliance with applicable laws and the terms of service
+> of any websites accessed. This software is provided "as-is" without warranty of any kind.
+>
+> If you are a rights holder and wish to have this project removed, please [contact me](https://github.com/nikuscs).
+
+> **Note:** This project was partially developed with AI assistance and may contain bugs or unexpected behavior. Use at your own risk.
 
 ## Install
 
