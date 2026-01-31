@@ -61,6 +61,8 @@ JSON fields: `id`, `title`, `price`, `city`, `region`, `seller`, `url`, `image`,
 | `--max-price` | Maximum price | `--max-price 800` |
 | `--city` | City name (auto-lookup) | `--city "Lisboa"` |
 | `--radius` | Radius in km from city | `--radius 30` |
+| `--keyword` | Additional keyword filter (must appear in title) | `--keyword "pro"` |
+| `--category` | OLX category ID (filter by category) | `--category 179` |
 | `--format` | table, json, markdown | `--format json` |
 
 ## Tracked Searches (with database)

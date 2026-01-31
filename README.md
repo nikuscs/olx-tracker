@@ -16,6 +16,7 @@ olx-tracker search "macbook" --max 10 --sort cheapest
 olx-tracker search "ps5" --min-price 300 --max-price 500
 olx-tracker search "iphone" --city "Porto" --radius 30
 olx-tracker search "iphone" --city "Paços de Ferreira" --radius 50
+olx-tracker search "gaming handheld" --keyword "ayn" --city "Porto" --radius 40
 olx-tracker search "ps5" --format json
 olx-tracker search "ps5" --format markdown
 ```
@@ -28,6 +29,8 @@ olx-tracker search "ps5" --format markdown
 | `--max-price` | Maximum price filter |
 | `--city` | City/region name (auto-lookup) |
 | `--radius` | Radius in km from city |
+| `--keyword` | Additional keyword filter (must appear in title) |
+| `--category` | OLX category ID (filter by category) |
 | `--format` | table, json, markdown (aliases: md, llm) |
 
 ## Tracked Searches
