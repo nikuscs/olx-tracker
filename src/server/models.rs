@@ -61,6 +61,8 @@ pub struct SearchRequest {
     pub max_price: Option<f64>,
     pub city: Option<String>,
     pub radius: Option<i32>,
+    pub keyword: Option<String>,
+    pub category: Option<i64>,
     pub format: Option<String>,
 }
 

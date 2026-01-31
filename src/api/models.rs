@@ -351,6 +351,20 @@ mod tests {
     }
 
     #[test]
+    fn test_param_value_numeric_get_value() {
+        // Tests line 91: get_value() on Numeric param returns value as string
+        let param = OfferParam {
+            key: "price".to_string(),
+            name: "Price".to_string(),
+            value: Some(ParamValue::Numeric {
+                value: 123.45, label: Some("123.45 €".to_string())
+            }),
+        };
+
+        assert_eq!(param.get_value(), Some("123.45".to_string()));
+    }
+
+    #[test]
     fn test_param_value_other() {
         let param = OfferParam {
             key: "complex".to_string(),

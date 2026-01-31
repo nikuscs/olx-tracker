@@ -191,13 +191,12 @@ fn format_markdown(
     out.push_str(&format!("**Found:** {} listings\n", offers.len()));
     out.push_str(&format!("**Sorted by:** {sort}\n"));
 
-    if min_price.is_some() || max_price.is_some() {
-        let filter = match (min_price, max_price) {
-            (Some(min), Some(max)) => format!("{min:.0}€ - {max:.0}€"),
-            (Some(min), None) => format!("≥ {min:.0}€"),
-            (None, Some(max)) => format!("≤ {max:.0}€"),
-            (None, None) => String::new(),
-        };
+    if let Some(filter) = match (min_price, max_price) {
+        (Some(min), Some(max)) => Some(format!("{min:.0}€ - {max:.0}€")),
+        (Some(min), None) => Some(format!("≥ {min:.0}€")),
+        (None, Some(max)) => Some(format!("≤ {max:.0}€")),
+        (None, None) => None,
+    } {
         out.push_str(&format!("**Price filter:** {filter}\n"));
     }
 
@@ -508,5 +507,85 @@ mod tests {
         assert_eq!(item.city, Some("Lisbon".to_string()));
         assert_eq!(item.url, "https://example.com/1");
         assert_eq!(item.image, Some("https://example.com/photo.jpg".to_string()));
+    }
+
+    #[test]
+    fn test_format_table_min_price_only() {
+        let offers = vec![create_test_offer(1, "Test", Some(100.0), Some("City"))];
+        let output = format_table("query", "newest", &offers, Some(50.0), None);
+
+        assert!(output.contains("[min: 50€]"));
+    }
+
+    #[test]
+    fn test_format_table_max_price_only() {
+        let offers = vec![create_test_offer(1, "Test", Some(100.0), Some("City"))];
+        let output = format_table("query", "newest", &offers, None, Some(200.0));
+
+        assert!(output.contains("[max: 200€]"));
+    }
+
+    #[test]
+    fn test_format_table_with_region() {
+        use crate::api::LocationRegion;
+
+        let mut offer = create_test_offer(1, "Test", Some(100.0), Some("Porto"));
+        // Add region to the offer
+        if let Some(ref mut loc) = offer.location {
+            loc.region = Some(LocationRegion { id: Some(1), name: "Norte".to_string() });
+        }
+
+        let output = format_table("query", "newest", &[offer], None, None);
+
+        assert!(output.contains("Porto, Norte"));
+    }
+
+    #[test]
+    fn test_format_markdown_no_price_filter() {
+        let offers = vec![create_test_offer(1, "Item", Some(100.0), Some("City"))];
+        let output = format_markdown("query", "newest", &offers, None, None);
+
+        // Should not contain price filter line when both are None
+        assert!(!output.contains("**Price filter:**"));
+    }
+
+    #[test]
+    fn test_format_markdown_region_only() {
+        use crate::api::LocationRegion;
+
+        let mut offer = create_test_offer(1, "Test", Some(100.0), None);
+        // Set only region, no city
+        offer.location = Some(OfferLocation {
+            city: None,
+            region: Some(LocationRegion { id: Some(1), name: "Norte".to_string() }),
+        });
+
+        let output = format_markdown("query", "newest", &[offer], None, None);
+
+        assert!(output.contains("Norte"));
+    }
+
+    #[test]
+    fn test_format_markdown_city_and_region() {
+        use crate::api::LocationRegion;
+
+        let mut offer = create_test_offer(1, "Test", Some(100.0), Some("Porto"));
+        if let Some(ref mut loc) = offer.location {
+            loc.region = Some(LocationRegion { id: Some(1), name: "Norte".to_string() });
+        }
+
+        let output = format_markdown("query", "newest", &[offer], None, None);
+
+        assert!(output.contains("Porto, Norte"));
+    }
+
+    #[test]
+    fn test_format_markdown_no_location() {
+        let mut offer = create_test_offer(1, "Test", Some(100.0), None);
+        offer.location = None;
+
+        let output = format_markdown("query", "newest", &[offer], None, None);
+
+        assert!(output.contains("Unknown location"));
     }
 }

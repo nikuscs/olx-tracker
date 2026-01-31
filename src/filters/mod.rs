@@ -9,6 +9,37 @@ pub use radius::RadiusFilter;
 use crate::api::OfferData;
 use crate::db::Search;
 
+// ============================================================================
+// Standalone filter utilities (for quick search without database/Search struct)
+// ============================================================================
+
+/// Check if a title contains the keyword (case-insensitive substring match).
+///
+/// Returns true if keyword is None or if the title contains the keyword.
+/// This is for the `--keyword` CLI flag, which is an additional filter.
+/// Note: This differs from `KeywordFilter` which splits keywords by whitespace.
+#[must_use]
+pub fn matches_keyword_filter(title: &str, keyword: Option<&str>) -> bool {
+    keyword.is_none_or(|kw| title.to_lowercase().contains(&kw.to_lowercase()))
+}
+
+/// Check if a price matches the min/max price range.
+/// Returns true if price is within range, or if no filters are set.
+/// Items without a price pass through (return true).
+#[must_use]
+pub fn matches_price_range(
+    price: Option<f64>,
+    min_price: Option<f64>,
+    max_price: Option<f64>,
+) -> bool {
+    match (price, min_price, max_price) {
+        (Some(p), Some(min), Some(max)) => p >= min && p <= max,
+        (Some(p), Some(min), None) => p >= min,
+        (Some(p), None, Some(max)) => p <= max,
+        (None, _, _) | (Some(_), None, None) => true,
+    }
+}
+
 /// Trait for implementing custom filters
 pub trait Filter: Send + Sync {
     /// Return true if the offer should be included, false to exclude
@@ -196,5 +227,82 @@ mod tests {
 
         assert_eq!(pass_filter.name(), "AlwaysPass");
         assert_eq!(fail_filter.name(), "AlwaysFail");
+    }
+
+    // Tests for standalone filter utilities
+
+    #[test]
+    fn test_matches_keyword_filter_none() {
+        assert!(matches_keyword_filter("iPhone 14 Pro", None));
+        assert!(matches_keyword_filter("", None));
+    }
+
+    #[test]
+    fn test_matches_keyword_filter_match() {
+        assert!(matches_keyword_filter("iPhone 14 Pro", Some("iPhone")));
+        assert!(matches_keyword_filter("iPhone 14 Pro", Some("14")));
+        assert!(matches_keyword_filter("iPhone 14 Pro", Some("Pro")));
+    }
+
+    #[test]
+    fn test_matches_keyword_filter_case_insensitive() {
+        assert!(matches_keyword_filter("iPhone 14 Pro", Some("iphone")));
+        assert!(matches_keyword_filter("iPhone 14 Pro", Some("IPHONE")));
+        assert!(matches_keyword_filter("AYN Odin 2 Portal", Some("ayn")));
+        assert!(matches_keyword_filter("ayn odin 2 portal", Some("AYN")));
+    }
+
+    #[test]
+    fn test_matches_keyword_filter_no_match() {
+        assert!(!matches_keyword_filter("iPhone 14 Pro", Some("Samsung")));
+        assert!(!matches_keyword_filter("PlayStation 5", Some("Xbox")));
+    }
+
+    #[test]
+    fn test_matches_keyword_filter_empty_title() {
+        assert!(!matches_keyword_filter("", Some("iPhone")));
+    }
+
+    #[test]
+    fn test_matches_keyword_filter_substring() {
+        assert!(matches_keyword_filter("iPhone 14 Pro Max", Some("14 Pro")));
+        assert!(matches_keyword_filter("PlayStation 5", Some("Play")));
+    }
+
+    #[test]
+    fn test_matches_price_range_no_filters() {
+        assert!(matches_price_range(Some(500.0), None, None));
+        assert!(matches_price_range(None, None, None));
+    }
+
+    #[test]
+    fn test_matches_price_range_min_only() {
+        assert!(matches_price_range(Some(500.0), Some(200.0), None));
+        assert!(matches_price_range(Some(200.0), Some(200.0), None)); // equal
+        assert!(!matches_price_range(Some(100.0), Some(200.0), None));
+    }
+
+    #[test]
+    fn test_matches_price_range_max_only() {
+        assert!(matches_price_range(Some(500.0), None, Some(800.0)));
+        assert!(matches_price_range(Some(800.0), None, Some(800.0))); // equal
+        assert!(!matches_price_range(Some(900.0), None, Some(800.0)));
+    }
+
+    #[test]
+    fn test_matches_price_range_both() {
+        assert!(matches_price_range(Some(500.0), Some(200.0), Some(800.0)));
+        assert!(matches_price_range(Some(200.0), Some(200.0), Some(800.0))); // at min
+        assert!(matches_price_range(Some(800.0), Some(200.0), Some(800.0))); // at max
+        assert!(!matches_price_range(Some(100.0), Some(200.0), Some(800.0)));
+        assert!(!matches_price_range(Some(900.0), Some(200.0), Some(800.0)));
+    }
+
+    #[test]
+    fn test_matches_price_range_no_price() {
+        // Items without price should pass through
+        assert!(matches_price_range(None, Some(200.0), Some(800.0)));
+        assert!(matches_price_range(None, Some(200.0), None));
+        assert!(matches_price_range(None, None, Some(800.0)));
     }
 }

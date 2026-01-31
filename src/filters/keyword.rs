@@ -95,4 +95,10 @@ mod tests {
 
         assert!(!filter.apply(&offer, &search));
     }
+
+    #[test]
+    fn test_keyword_filter_name() {
+        let filter = KeywordFilter;
+        assert_eq!(filter.name(), "KeywordFilter");
+    }
 }

@@ -368,4 +368,240 @@ mod tests {
         assert_eq!(payload.content, Some("Test content".to_string()));
         assert_eq!(payload.embeds.len(), 1);
     }
+
+    #[tokio::test]
+    async fn test_notify_new_listings_sends_webhook() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let notifier = DiscordNotifier::new(mock_server.uri());
+        let listing = make_listing();
+
+        let result = notifier.notify_new_listings(&[listing]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_notify_new_listings_empty() {
+        let notifier = DiscordNotifier::new("https://discord.com/webhook".to_string());
+        let result = notifier.notify_new_listings(&[]).await;
+        assert!(result.is_ok()); // Should return Ok without sending
+    }
+
+    #[tokio::test]
+    async fn test_notify_price_drops_sends_webhook() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let notifier = DiscordNotifier::new(mock_server.uri());
+        let listing = make_listing();
+        let drops = [(listing, 120.0, 100.0)];
+
+        let result = notifier.notify_price_drops(&drops).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_notify_price_drops_empty() {
+        let notifier = DiscordNotifier::new("https://discord.com/webhook".to_string());
+        let result = notifier.notify_price_drops(&[]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_notify_deals_sends_webhook() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let notifier = DiscordNotifier::new(mock_server.uri());
+        let listing = make_listing();
+
+        let result = notifier.notify_deals(&[listing], Some(150.0)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_notify_deals_empty() {
+        let notifier = DiscordNotifier::new("https://discord.com/webhook".to_string());
+        let result = notifier.notify_deals(&[], None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_notify_deals_no_avg_price() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let notifier = DiscordNotifier::new(mock_server.uri());
+        let listing = make_listing();
+
+        let result = notifier.notify_deals(&[listing], None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_webhook_non_success_status() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(429).set_body_string("Rate limited"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let notifier = DiscordNotifier::new(mock_server.uri());
+        let listing = make_listing();
+
+        // Should not error, but will log a warning
+        let result = notifier.notify_new_listings(&[listing]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_webhook_connection_error() {
+        let notifier = DiscordNotifier::new("http://127.0.0.1:1".to_string()); // Invalid port
+        let listing = make_listing();
+
+        let result = notifier.notify_new_listings(&[listing]).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_notify_new_listings_multiple_chunks() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        // Expect 2 requests (12 listings = 10 + 2)
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let notifier = DiscordNotifier::new(mock_server.uri());
+        let listings: Vec<Listing> = (0..12)
+            .map(|i| {
+                let mut l = make_listing();
+                l.id = i;
+                l
+            })
+            .collect();
+
+        let result = notifier.notify_new_listings(&listings).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_notify_price_drops_multiple_chunks() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let notifier = DiscordNotifier::new(mock_server.uri());
+        let drops: Vec<(Listing, f64, f64)> = (0..15)
+            .map(|i| {
+                let mut l = make_listing();
+                l.id = i;
+                (l, 100.0, 80.0)
+            })
+            .collect();
+
+        let result = notifier.notify_price_drops(&drops).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_notify_deals_multiple_chunks() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(2)
+            .mount(&mock_server)
+            .await;
+
+        let notifier = DiscordNotifier::new(mock_server.uri());
+        let deals: Vec<Listing> = (0..11)
+            .map(|i| {
+                let mut l = make_listing();
+                l.id = i;
+                l
+            })
+            .collect();
+
+        let result = notifier.notify_deals(&deals, Some(150.0)).await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_discord_field_struct() {
+        let field =
+            DiscordField { name: "Price".to_string(), value: "100 EUR".to_string(), inline: true };
+
+        assert_eq!(field.name, "Price");
+        assert_eq!(field.value, "100 EUR");
+        assert!(field.inline);
+    }
+
+    #[test]
+    fn test_listing_to_embed_no_price_no_location() {
+        let mut listing = make_listing();
+        listing.price = None;
+        listing.city = None;
+        listing.region = None;
+        listing.seller_name = None;
+
+        let embed = DiscordNotifier::listing_to_embed(&listing, 0x0034_98db, None);
+
+        assert!(embed.description.contains("N/A"));
+        assert!(embed.description.contains("Unknown"));
+        assert!(!embed.description.contains("Seller:"));
+    }
 }

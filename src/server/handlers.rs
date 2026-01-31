@@ -4,7 +4,10 @@ use axum::{Json, extract::State};
 use chrono::{Duration as ChronoDuration, Utc};
 
 use crate::api::SearchParams;
-use crate::{Database, FormatParams, OlxClient, OutputFormat, SortOrder, format_results};
+use crate::{
+    Database, FormatParams, OlxClient, OutputFormat, SortOrder, format_results,
+    matches_keyword_filter, matches_price_range,
+};
 
 use super::daemon::{run_searches_blocking, start_daemon, stop_daemon};
 use super::error::{ApiError, ErrorKind};
@@ -221,7 +224,7 @@ pub async fn search_handler(
         query: payload.query.clone(),
         city_id,
         radius_km: payload.radius,
-        category_id: None,
+        category_id: payload.category,
         sort: sort_order,
         offset: 0,
         limit: 50,
@@ -234,13 +237,9 @@ pub async fn search_handler(
     let offers: Vec<_> = all_offers
         .into_iter()
         .filter(|o| {
-            let price = o.get_price();
-            match (price, payload.min_price, payload.max_price) {
-                (Some(p), Some(min), Some(max)) => p >= min && p <= max,
-                (Some(p), Some(min), None) => p >= min,
-                (Some(p), None, Some(max)) => p <= max,
-                (None, _, _) | (Some(_), None, None) => true,
-            }
+            let price_ok = matches_price_range(o.get_price(), payload.min_price, payload.max_price);
+            let keyword_ok = matches_keyword_filter(&o.title, payload.keyword.as_deref());
+            price_ok && keyword_ok
         })
         .take(max_results as usize)
         .collect();

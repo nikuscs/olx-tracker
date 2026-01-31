@@ -419,4 +419,133 @@ mod tests {
         assert_eq!(OlxCountry::Kz.api_base_url(), "https://www.olx.kz/api/v1/offers");
         assert_eq!(OlxCountry::Uz.api_base_url(), "https://www.olx.uz/api/v1/offers");
     }
+
+    // Tests for OlxCountry::from_str
+    #[test]
+    fn test_country_from_str_short_codes() {
+        assert_eq!("pt".parse::<OlxCountry>().unwrap(), OlxCountry::Pt);
+        assert_eq!("pl".parse::<OlxCountry>().unwrap(), OlxCountry::Pl);
+        assert_eq!("ua".parse::<OlxCountry>().unwrap(), OlxCountry::Ua);
+        assert_eq!("ro".parse::<OlxCountry>().unwrap(), OlxCountry::Ro);
+        assert_eq!("bg".parse::<OlxCountry>().unwrap(), OlxCountry::Bg);
+        assert_eq!("kz".parse::<OlxCountry>().unwrap(), OlxCountry::Kz);
+        assert_eq!("uz".parse::<OlxCountry>().unwrap(), OlxCountry::Uz);
+    }
+
+    #[test]
+    fn test_country_from_str_full_names() {
+        assert_eq!("portugal".parse::<OlxCountry>().unwrap(), OlxCountry::Pt);
+        assert_eq!("poland".parse::<OlxCountry>().unwrap(), OlxCountry::Pl);
+        assert_eq!("ukraine".parse::<OlxCountry>().unwrap(), OlxCountry::Ua);
+        assert_eq!("romania".parse::<OlxCountry>().unwrap(), OlxCountry::Ro);
+        assert_eq!("bulgaria".parse::<OlxCountry>().unwrap(), OlxCountry::Bg);
+        assert_eq!("kazakhstan".parse::<OlxCountry>().unwrap(), OlxCountry::Kz);
+        assert_eq!("uzbekistan".parse::<OlxCountry>().unwrap(), OlxCountry::Uz);
+    }
+
+    #[test]
+    fn test_country_from_str_case_insensitive() {
+        assert_eq!("PT".parse::<OlxCountry>().unwrap(), OlxCountry::Pt);
+        assert_eq!("Portugal".parse::<OlxCountry>().unwrap(), OlxCountry::Pt);
+        assert_eq!("PORTUGAL".parse::<OlxCountry>().unwrap(), OlxCountry::Pt);
+    }
+
+    #[test]
+    fn test_country_from_str_invalid() {
+        let result = "invalid".parse::<OlxCountry>();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Unknown country"));
+        assert!(err.contains("Valid:")); // Capital V as in the actual error message
+    }
+
+    #[test]
+    fn test_config_load_file() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "[api]\ncountry = \"pl\"").unwrap();
+
+        let config = Config::load(&path).unwrap();
+        assert_eq!(config.api.country, OlxCountry::Pl);
+    }
+
+    #[test]
+    fn test_config_load_nonexistent() {
+        let result = Config::load("nonexistent_file_12345.toml");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Failed to read config file"));
+    }
+
+    #[test]
+    fn test_config_load_invalid_toml() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("invalid.toml");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "this is not valid toml {{{{").unwrap();
+
+        let result = Config::load(&path);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Failed to parse config file"));
+    }
+
+    #[test]
+    fn test_config_load_with_validation_error() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(file, "[proxy]\nenabled = true").unwrap(); // No URL
+
+        let result = Config::load(&path);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Proxy URL is required"));
+    }
+
+    #[test]
+    fn test_validation_valid_config() {
+        let config = Config::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validation_proxy_with_url() {
+        let toml = r#"
+            [proxy]
+            enabled = true
+            url = "socks5://localhost:1080"
+        "#;
+
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_auth_config_default() {
+        let auth = AuthConfig::default();
+        assert!(auth.bearer_token.is_none());
+    }
+
+    #[test]
+    fn test_country_serde_aliases() {
+        // Test uppercase serde aliases
+        let toml = r#"
+            [api]
+            country = "PT"
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.api.country, OlxCountry::Pt);
+
+        let toml = r#"
+            [api]
+            country = "PL"
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.api.country, OlxCountry::Pl);
+    }
 }

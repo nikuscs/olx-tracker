@@ -395,4 +395,291 @@ mod tests {
         assert_eq!(result.new_listings.len(), 1);
         assert_eq!(result.new_listings[0].price, Some(150.0));
     }
+
+    // Mock client with city lookup
+    struct MockClientWithCity {
+        offers: Vec<OfferData>,
+        city_id: Option<i64>,
+    }
+
+    impl MockClientWithCity {
+        fn new(offers: Vec<OfferData>, city_id: Option<i64>) -> Self {
+            Self { offers, city_id }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl SearchClient for MockClientWithCity {
+        async fn lookup_city(
+            &self,
+            _city_name: &str,
+        ) -> Result<Option<crate::api::models::LocationResult>> {
+            use crate::api::models::{LocationCity, LocationRegion, LocationResult};
+            if let Some(id) = self.city_id {
+                Ok(Some(LocationResult {
+                    city: LocationCity {
+                        id: Some(id),
+                        name: "Test City".to_string(),
+                        normalized_name: Some("test-city".to_string()),
+                    },
+                    municipality: None,
+                    region: Some(LocationRegion { id: Some(1), name: "Test Region".to_string() }),
+                }))
+            } else {
+                Ok(None)
+            }
+        }
+
+        async fn search_all(
+            &self,
+            _params: &SearchParams,
+            _max_results: i32,
+        ) -> Result<Vec<OfferData>> {
+            Ok(self.offers.clone())
+        }
+
+        fn request_delay(&self) -> Duration {
+            Duration::from_millis(0)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_search_with_city_lookup_found() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db
+            .create_search("Test", "iphone", None, None, Some("Porto"), Some(10), None, None, None)
+            .unwrap();
+
+        let offers = vec![create_test_offer(1, "iPhone 12", Some(400.0))];
+        let client = MockClientWithCity::new(offers, Some(12345));
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        let search = db.get_search(search_id).unwrap().unwrap();
+        let result = tracker.run_search(&search, 10).await.unwrap();
+
+        assert_eq!(result.new_listings.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_run_search_with_city_lookup_not_found() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db
+            .create_search(
+                "Test",
+                "iphone",
+                None,
+                None,
+                Some("NonexistentCity"),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        let offers = vec![create_test_offer(1, "iPhone 12", Some(400.0))];
+        let client = MockClientWithCity::new(offers, None); // City not found
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        let search = db.get_search(search_id).unwrap().unwrap();
+        let result = tracker.run_search(&search, 10).await.unwrap();
+
+        // Should still work, just without city filter
+        assert_eq!(result.new_listings.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_run_search_price_increase() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+
+        // Insert initial listing with lower price
+        db.upsert_listing(1, search_id, "iPhone 12", Some(400.0), "EUR", "url", None, None, None)
+            .unwrap();
+
+        // Return same listing with higher price (price increase, not drop)
+        let offers = vec![create_test_offer(1, "iPhone 12", Some(500.0))];
+        let client = MockClient::new(offers);
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        let search = db.get_search(search_id).unwrap().unwrap();
+        let result = tracker.run_search(&search, 10).await.unwrap();
+
+        // No price drops (price went up, not down)
+        assert_eq!(result.price_drops.len(), 0);
+        assert_eq!(result.updated_listings.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_run_search_same_price() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+
+        // Insert initial listing
+        db.upsert_listing(1, search_id, "iPhone 12", Some(400.0), "EUR", "url", None, None, None)
+            .unwrap();
+
+        // Return same listing with same price
+        let offers = vec![create_test_offer(1, "iPhone 12", Some(400.0))];
+        let client = MockClient::new(offers);
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        let search = db.get_search(search_id).unwrap().unwrap();
+        let result = tracker.run_search(&search, 10).await.unwrap();
+
+        // No price drops
+        assert_eq!(result.price_drops.len(), 0);
+        assert_eq!(result.updated_listings.len(), 1);
+    }
+
+    // Mock client that returns error
+    struct ErrorClient;
+
+    #[async_trait::async_trait]
+    impl SearchClient for ErrorClient {
+        async fn lookup_city(
+            &self,
+            _city_name: &str,
+        ) -> Result<Option<crate::api::models::LocationResult>> {
+            Ok(None)
+        }
+
+        async fn search_all(
+            &self,
+            _params: &SearchParams,
+            _max_results: i32,
+        ) -> Result<Vec<OfferData>> {
+            Err(anyhow::anyhow!("API error"))
+        }
+
+        fn request_delay(&self) -> Duration {
+            Duration::from_millis(0)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_all_searches_handles_errors() {
+        let db = Database::open_in_memory().unwrap();
+        db.create_search("Search1", "iphone", None, None, None, None, None, None, None).unwrap();
+        db.create_search("Search2", "laptop", None, None, None, None, None, None, None).unwrap();
+
+        let client = ErrorClient; // Returns error
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        // Should not panic, just return empty results
+        let results = tracker.run_all_searches(10).await.unwrap();
+        assert_eq!(results.len(), 0); // Both searches failed
+    }
+
+    #[tokio::test]
+    async fn test_run_search_with_location_info() {
+        use crate::api::models::{LocationCity, LocationRegion, OfferLocation};
+
+        let db = Database::open_in_memory().unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+
+        let mut offer = create_test_offer(1, "iPhone 12", Some(400.0));
+        offer.location = Some(OfferLocation {
+            city: Some(LocationCity {
+                id: Some(1),
+                name: "Porto".to_string(),
+                normalized_name: Some("porto".to_string()),
+            }),
+            region: Some(LocationRegion { id: Some(1), name: "Norte".to_string() }),
+        });
+
+        let client = MockClient::new(vec![offer]);
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        let search = db.get_search(search_id).unwrap().unwrap();
+        let result = tracker.run_search(&search, 10).await.unwrap();
+
+        assert_eq!(result.new_listings.len(), 1);
+        assert_eq!(result.new_listings[0].city, Some("Porto".to_string()));
+        assert_eq!(result.new_listings[0].region, Some("Norte".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_run_search_with_seller_info() {
+        use crate::api::models::OfferUser;
+
+        let db = Database::open_in_memory().unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+
+        let mut offer = create_test_offer(1, "iPhone 12", Some(400.0));
+        offer.user = Some(OfferUser { id: Some(1), name: Some("John Seller".to_string()) });
+
+        let client = MockClient::new(vec![offer]);
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        let search = db.get_search(search_id).unwrap().unwrap();
+        let result = tracker.run_search(&search, 10).await.unwrap();
+
+        assert_eq!(result.new_listings.len(), 1);
+        assert_eq!(result.new_listings[0].seller_name, Some("John Seller".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_run_search_with_category() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id = db
+            .create_search("Test", "iphone", None, None, None, None, Some(123), None, None)
+            .unwrap();
+
+        let offers = vec![create_test_offer(1, "iPhone 12", Some(400.0))];
+        let client = MockClient::new(offers);
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        let search = db.get_search(search_id).unwrap().unwrap();
+        assert_eq!(search.category_id, Some(123));
+
+        let result = tracker.run_search(&search, 10).await.unwrap();
+        assert_eq!(result.new_listings.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_run_search_no_price_listing() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+
+        // Offer without price
+        let offers = vec![create_test_offer(1, "iPhone 12", None)];
+        let client = MockClient::new(offers);
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        let search = db.get_search(search_id).unwrap().unwrap();
+        let result = tracker.run_search(&search, 10).await.unwrap();
+
+        assert_eq!(result.new_listings.len(), 1);
+        assert!(result.new_listings[0].price.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_track_result_clone() {
+        let result = TrackResult {
+            search_id: 1,
+            new_listings: vec![],
+            updated_listings: vec![],
+            deals: vec![],
+            price_drops: vec![],
+        };
+
+        let cloned = result.clone();
+        assert_eq!(cloned.search_id, result.search_id);
+    }
+
+    #[tokio::test]
+    async fn test_search_tracker_default_filters() {
+        let db = Database::open_in_memory().unwrap();
+        let client = MockClient::new(vec![]);
+        let tracker = SearchTracker::new(&db, &client, DealConfig::default());
+
+        // Default filter chain should be empty
+        assert!(tracker.filters.is_empty());
+    }
 }

@@ -411,4 +411,205 @@ mod tests {
         let discount = if old > 0.0 { Some(((old - new) / old) * 100.0) } else { None };
         assert_eq!(discount, None);
     }
+
+    #[tokio::test]
+    async fn test_notify_new_listings_sends_webhook() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = NotificationConfig {
+            webhook_url: Some(mock_server.uri()),
+            discord_webhook_url: None,
+            notify_on_new_listing: true,
+            notify_on_price_drop: false,
+            notify_on_deal: false,
+        };
+
+        let notifier = WebhookNotifier::new(config);
+        let listing = make_test_listing(1, "Test Item", Some(100.0));
+
+        let result = notifier.notify_new_listings(&[listing]).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_notify_price_drops_sends_webhook() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = NotificationConfig {
+            webhook_url: Some(mock_server.uri()),
+            discord_webhook_url: None,
+            notify_on_new_listing: false,
+            notify_on_price_drop: true,
+            notify_on_deal: false,
+        };
+
+        let notifier = WebhookNotifier::new(config);
+        let listing = make_test_listing(1, "iPhone", Some(80.0));
+        let drops = [(listing, 100.0, 80.0)];
+
+        let result = notifier.notify_price_drops(&drops).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_notify_deals_sends_webhook() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = NotificationConfig {
+            webhook_url: Some(mock_server.uri()),
+            discord_webhook_url: None,
+            notify_on_new_listing: false,
+            notify_on_price_drop: false,
+            notify_on_deal: true,
+        };
+
+        let notifier = WebhookNotifier::new(config);
+        let listing = make_test_listing(1, "Deal Item", Some(50.0));
+
+        let result = notifier.notify_deals(&[listing], Some(100.0)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_webhook_non_success_status() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = NotificationConfig {
+            webhook_url: Some(mock_server.uri()),
+            discord_webhook_url: None,
+            notify_on_new_listing: true,
+            notify_on_price_drop: false,
+            notify_on_deal: false,
+        };
+
+        let notifier = WebhookNotifier::new(config);
+        let payload =
+            WebhookPayload { event: "test".to_string(), listings: vec![], avg_price: None };
+
+        // Should not error, but will log a warning
+        let result = notifier.send_webhook(&payload).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_webhook_connection_error() {
+        let config = NotificationConfig {
+            webhook_url: Some("http://127.0.0.1:1".to_string()), // Invalid port
+            discord_webhook_url: None,
+            notify_on_new_listing: true,
+            notify_on_price_drop: false,
+            notify_on_deal: false,
+        };
+
+        let notifier = WebhookNotifier::new(config);
+        let payload = WebhookPayload {
+            event: "test".to_string(),
+            listings: vec![ListingPayload {
+                id: 1,
+                title: "Test".to_string(),
+                price: Some(100.0),
+                currency: "EUR".to_string(),
+                url: "https://example.com".to_string(),
+                city: None,
+                seller: None,
+                old_price: None,
+                discount_pct: None,
+            }],
+            avg_price: None,
+        };
+
+        let result = notifier.send_webhook(&payload).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_listing_payload_with_optional_fields() {
+        let payload = ListingPayload {
+            id: 123,
+            title: "Test".to_string(),
+            price: Some(100.0),
+            currency: "EUR".to_string(),
+            url: "https://example.com".to_string(),
+            city: Some("Porto".to_string()),
+            seller: Some("Seller".to_string()),
+            old_price: Some(120.0),
+            discount_pct: Some(16.67),
+        };
+
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("old_price"));
+        assert!(json.contains("discount_pct"));
+    }
+
+    #[test]
+    fn test_deals_discount_no_avg_price() {
+        // When avg_price is None, discount should be None
+        let price = Some(50.0);
+        let avg: Option<f64> = None;
+        let discount = match (price, avg) {
+            (Some(p), Some(a)) if a > 0.0 => Some(((a - p) / a) * 100.0),
+            _ => None,
+        };
+        assert_eq!(discount, None);
+    }
+
+    #[test]
+    fn test_deals_discount_no_price() {
+        // When price is None, discount should be None
+        let price: Option<f64> = None;
+        let avg = Some(100.0);
+        let discount = match (price, avg) {
+            (Some(p), Some(a)) if a > 0.0 => Some(((a - p) / a) * 100.0),
+            _ => None,
+        };
+        assert_eq!(discount, None);
+    }
+
+    #[test]
+    fn test_deals_discount_zero_avg() {
+        // When avg_price is 0, discount should be None (division by zero guard)
+        let price = Some(50.0);
+        let avg = Some(0.0);
+        let discount = match (price, avg) {
+            (Some(p), Some(a)) if a > 0.0 => Some(((a - p) / a) * 100.0),
+            _ => None,
+        };
+        assert_eq!(discount, None);
+    }
 }

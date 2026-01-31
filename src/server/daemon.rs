@@ -336,4 +336,159 @@ mod tests {
         let result = run_searches_blocking(":memory:", &config, Some(999), 10);
         assert!(result.is_err()); // Search won't exist
     }
+
+    #[tokio::test]
+    async fn test_run_searches_with_search_found() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+
+        let config = make_test_config();
+        let client = MockClient; // Use mock client - NO REAL API CALLS
+
+        let result = run_searches_with_client(&db, &client, &config, Some(search_id), 10).await;
+        assert!(result.is_ok());
+        let (new, deals) = result.unwrap();
+        assert_eq!(new, 0);
+        assert_eq!(deals, 0);
+    }
+
+    #[tokio::test]
+    async fn test_run_searches_all_with_searches() {
+        let db = Database::open_in_memory().unwrap();
+        db.create_search("Search1", "iphone", None, None, None, None, None, None, None).unwrap();
+        db.create_search("Search2", "laptop", None, None, None, None, None, None, None).unwrap();
+
+        let config = make_test_config();
+        let client = MockClient;
+
+        let result = run_searches_with_client(&db, &client, &config, None, 10).await;
+        assert!(result.is_ok());
+        let (new, deals) = result.unwrap();
+        assert_eq!(new, 0);
+        assert_eq!(deals, 0);
+    }
+
+    #[tokio::test]
+    async fn test_daemon_start_and_immediate_stop() {
+        let db_path = ":memory:".to_string();
+        let config = make_test_config();
+
+        let daemon = start_daemon(db_path, config, 1, 10);
+
+        // Immediately stop
+        let _ = daemon.stop_tx.send(());
+
+        // Should complete quickly
+        let result = daemon.handle.join();
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_stop_daemon_clears_state() {
+        let state = make_test_state();
+
+        // Start a daemon
+        let db_path = ":memory:".to_string();
+        let config = make_test_config();
+        let daemon = start_daemon(db_path, config, 60, 10);
+        *state.daemon.lock().await = Some(daemon);
+
+        // Verify daemon is set
+        assert!(state.daemon.lock().await.is_some());
+
+        // Stop the daemon
+        let stopped = stop_daemon(&state).await;
+        assert!(stopped);
+
+        // Verify daemon is cleared
+        assert!(state.daemon.lock().await.is_none());
+    }
+
+    // Mock client that returns results for testing
+    struct MockClientWithResults {
+        offers: Vec<OfferData>,
+    }
+
+    impl MockClientWithResults {
+        fn new() -> Self {
+            Self {
+                offers: vec![OfferData {
+                    id: 1,
+                    title: "Test iPhone".to_string(),
+                    url: "https://example.com/1".to_string(),
+                    params: vec![],
+                    photos: vec![],
+                    location: None,
+                    user: None,
+                    created_time: Some("2024-01-01T00:00:00Z".to_string()),
+                    last_refresh_time: None,
+                }],
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl SearchClient for MockClientWithResults {
+        async fn lookup_city(&self, _city_name: &str) -> anyhow::Result<Option<LocationResult>> {
+            Ok(None)
+        }
+
+        async fn search_all(
+            &self,
+            _params: &SearchParams,
+            _max_results: i32,
+        ) -> anyhow::Result<Vec<OfferData>> {
+            Ok(self.offers.clone())
+        }
+
+        fn request_delay(&self) -> Duration {
+            Duration::from_millis(0)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_run_searches_with_new_listings() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+
+        let config = make_test_config();
+        let client = MockClientWithResults::new();
+
+        let result = run_searches_with_client(&db, &client, &config, Some(search_id), 10).await;
+        assert!(result.is_ok());
+        let (new, _deals) = result.unwrap();
+        assert_eq!(new, 1); // One new listing
+    }
+
+    #[tokio::test]
+    async fn test_run_searches_updates_stats() {
+        let db = Database::open_in_memory().unwrap();
+        let search_id =
+            db.create_search("Test", "iphone", None, None, None, None, None, None, None).unwrap();
+
+        let config = make_test_config();
+        let client = MockClientWithResults::new();
+
+        // Run the search
+        let _ = run_searches_with_client(&db, &client, &config, Some(search_id), 10).await;
+
+        // Verify listings were stored
+        let listings = db.get_listings_for_search(search_id).unwrap();
+        assert_eq!(listings.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_daemon_handle_struct() {
+        let db_path = ":memory:".to_string();
+        let config = make_test_config();
+
+        let daemon = start_daemon(db_path, config, 60, 10);
+
+        // DaemonHandle should have stop_tx and handle
+        // Send stop signal and verify thread completes
+        let _ = daemon.stop_tx.send(());
+        assert!(daemon.handle.join().is_ok());
+    }
 }

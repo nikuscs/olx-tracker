@@ -194,6 +194,14 @@ enum Commands {
         #[arg(long)]
         radius: Option<i32>,
 
+        /// Additional keyword filter (must appear in title)
+        #[arg(long)]
+        keyword: Option<String>,
+
+        /// OLX category ID (filter by category)
+        #[arg(long)]
+        category: Option<i64>,
+
         /// Output format: table, json, markdown (or md/llm)
         #[arg(long, default_value = "table")]
         format: String,
@@ -220,6 +228,7 @@ enum Commands {
 }
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt()
@@ -319,9 +328,21 @@ async fn main() -> Result<()> {
         Commands::Toggle { search_id } => {
             commands::cmd_toggle(&db, search_id)?;
         }
-        Commands::Search { query, max, sort, min_price, max_price, city, radius, format } => {
+        Commands::Search {
+            query,
+            max,
+            sort,
+            min_price,
+            max_price,
+            city,
+            radius,
+            keyword,
+            category,
+            format,
+        } => {
             commands::cmd_search(
-                &config, &query, max, &sort, min_price, max_price, city, radius, &format,
+                &config, &query, max, &sort, min_price, max_price, city, radius, keyword, category,
+                &format,
             )
             .await?;
         }

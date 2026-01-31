@@ -2,7 +2,10 @@ use anyhow::Result;
 use tracing::info;
 
 use olx_tracker::api::SearchParams;
-use olx_tracker::{Config, FormatParams, OlxClient, OutputFormat, SortOrder, format_results};
+use olx_tracker::{
+    Config, FormatParams, OlxClient, OutputFormat, SortOrder, format_results,
+    matches_keyword_filter, matches_price_range,
+};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn cmd_search(
@@ -14,6 +17,8 @@ pub async fn cmd_search(
     max_price: Option<f64>,
     city: Option<String>,
     radius: Option<i32>,
+    keyword: Option<String>,
+    category: Option<i64>,
     format: &str,
 ) -> Result<()> {
     let sort_order: SortOrder = sort.parse().map_err(|e: String| anyhow::anyhow!("{e}"))?;
@@ -41,7 +46,7 @@ pub async fn cmd_search(
         query: query.to_string(),
         city_id,
         radius_km: radius,
-        category_id: None,
+        category_id: category,
         sort: sort_order,
         offset: 0,
         limit: 50,
@@ -51,17 +56,13 @@ pub async fn cmd_search(
     let fetch_count = max_results * 3; // Fetch 3x to have enough after filtering
     let all_offers = client.search_all(&params, fetch_count).await?;
 
-    // Apply price filters
+    // Apply price and keyword filters
     let offers: Vec<_> = all_offers
         .into_iter()
         .filter(|o| {
-            let price = o.get_price();
-            match (price, min_price, max_price) {
-                (Some(p), Some(min), Some(max)) => p >= min && p <= max,
-                (Some(p), Some(min), None) => p >= min,
-                (Some(p), None, Some(max)) => p <= max,
-                (None, _, _) | (Some(_), None, None) => true, // Keep items without price
-            }
+            let price_ok = matches_price_range(o.get_price(), min_price, max_price);
+            let keyword_ok = matches_keyword_filter(&o.title, keyword.as_deref());
+            price_ok && keyword_ok
         })
         .take(max_results as usize)
         .collect();
@@ -74,6 +75,9 @@ pub async fn cmd_search(
                 min_price.map_or_else(|| "any".to_string(), |p| format!("{p:.0}€")),
                 max_price.map_or_else(|| "any".to_string(), |p| format!("{p:.0}€"))
             );
+        }
+        if let Some(ref kw) = keyword {
+            println!("(keyword filter: \"{kw}\")");
         }
         return Ok(());
     }

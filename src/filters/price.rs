@@ -131,4 +131,10 @@ mod tests {
         let search = make_search(Some(100.0), Some(500.0));
         assert!(filter.apply(&offer, &search)); // Keep listings without price
     }
+
+    #[test]
+    fn test_price_filter_name() {
+        let filter = PriceFilter;
+        assert_eq!(filter.name(), "PriceFilter");
+    }
 }
