@@ -1,4 +1,4 @@
-# olx-tracker
+# 🕵️ olx-tracker
 
 ![CI](https://github.com/nikuscs/olx-tracker/actions/workflows/ci.yml/badge.svg)
 ![Release](https://img.shields.io/github/v/release/nikuscs/olx-tracker)
