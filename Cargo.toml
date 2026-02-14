@@ -1,6 +1,6 @@
 [package]
 name = "olx-tracker"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.85"
 description = "A CLI tool to track OLX.pt listings, monitor prices, and alert on good deals"
