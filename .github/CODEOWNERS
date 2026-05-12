@@ -1,0 +1,7 @@
+/.github/ @nikuscs
+/Cargo.toml @nikuscs
+/Cargo.lock @nikuscs
+/rustfmt.toml @nikuscs
+/config.example.toml @nikuscs
+/migrations/ @nikuscs
+/src/ @nikuscs
