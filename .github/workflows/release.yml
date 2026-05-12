@@ -17,8 +17,7 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-permissions:
-  contents: write
+permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -29,6 +28,8 @@ jobs:
   checks:
     name: Checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -46,6 +47,9 @@ jobs:
     name: Create Tag
     needs: checks
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.bump.outputs.version }}
       tag: ${{ steps.bump.outputs.tag }}
@@ -118,6 +122,8 @@ jobs:
     name: Build (${{ matrix.target }})
     needs: create-tag
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       matrix:
         include:
@@ -172,6 +178,10 @@ jobs:
     name: Create Release
     needs: [create-tag, build]
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -247,6 +257,9 @@ jobs:
     needs: [create-tag, build]
     if: failure() && needs.create-tag.result == 'success'
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
